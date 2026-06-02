@@ -1,6 +1,6 @@
 # requirements.txt
 
-Core
+
 fastapi
 uvicorn[standard]
 python-multipart        # required for file uploads
