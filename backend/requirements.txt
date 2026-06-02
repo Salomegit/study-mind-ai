@@ -1,0 +1,21 @@
+# requirements.txt
+
+# Core
+chromadb
+sentence-transformers
+pydantic-settings
+
+# LangChain
+langchain
+langchain-community
+langchain-text-splitters
+langchain-core
+
+# PDF support (used by PyPDFLoader)
+pypdf
+
+# DOCX support (used by UnstructuredWordDocumentLoader)
+unstructured[docx]
+
+# Env
+python-dotenv
