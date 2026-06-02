@@ -1,30 +1,33 @@
-# backend/process_pdf.py
+# backend/process_document.py
+
+"""
+Full ingestion pipeline for PDF and DOCX files.
+
+Flow:
+    load_document()        →  List[Document]   (loaders.py)
+    chunk_documents()      →  List[Document]   (smaller pieces, metadata preserved)
+    embed_chunks()         →  List[List[float]]
+    store_in_chromadb()    →  chromadb.Collection
+"""
 
 import logging
 import uuid
-from pathlib import Path
-from typing import List
-from config import settings
+from typing import Optional
 
 import chromadb
-from PyPDF2 import PdfReader
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 
+from config import settings
+from backend.loaders import load_document
 
 # -----------------------------------------------------------------------------
-# Configuration
+# Logging
 # -----------------------------------------------------------------------------
-
-self.model = SentenceTransformer(
-    settings.EMBEDDING_MODEL
-)
-
-self.client = chromadb.PersistentClient(
-    path=settings.CHROMA_DB_PATH
-)
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
@@ -32,242 +35,242 @@ logger = logging.getLogger(__name__)
 
 
 # -----------------------------------------------------------------------------
-# PDF Processor
+# Document Processor
 # -----------------------------------------------------------------------------
 
-class PDFProcessor:
-    def __init__(self):
-        logger.info("Loading embedding model...")
-        self.model = SentenceTransformer(EMBEDDING_MODEL)
+class DocumentProcessor:
+    """
+    Handles ingestion of PDF and DOCX files into ChromaDB.
 
-        logger.info("Initializing ChromaDB...")
-        self.client = chromadb.PersistentClient(
-            path=CHROMA_DB_PATH
+    Usage:
+        processor = DocumentProcessor()
+
+        # PDF
+        result = processor.process("report.pdf", collection_name="finance")
+
+        # DOCX
+        result = processor.process("notes.docx", collection_name="meetings")
+
+        # Returns:
+        # {
+        #     "document_id":      "abc-123",
+        #     "collection_name":  "finance",
+        #     "source_file":      "report.pdf",
+        #     "file_type":        "pdf",
+        #     "elements_loaded":  42,     ← pages (PDF) or elements (DOCX)
+        #     "chunks_stored":    87,
+        # }
+    """
+
+    def __init__(self):
+        logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
+        self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
+
+        logger.info("Initializing ChromaDB at: %s", settings.CHROMA_DB_PATH)
+        self.client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
+
+        self.splitter = RecursiveCharacterTextSplitter(
+            chunk_size=settings.CHUNK_SIZE,
+            chunk_overlap=settings.CHUNK_OVERLAP,
+            length_function=len,
         )
 
     # -------------------------------------------------------------------------
-    # PDF Extraction
+    # Step 1 — Load
     # -------------------------------------------------------------------------
 
-    def extract_pdf_text(self, pdf_path: str) -> str:
+    def load(self, file_path: str) -> list[Document]:
         """
-        Extract text from a PDF file.
+        Load a PDF or DOCX file. Returns a list of LangChain Documents.
+        File type is detected automatically from the extension.
         """
-
-        pdf_file = Path(pdf_path)
-
-        if not pdf_file.exists():
-            raise FileNotFoundError(f"PDF not found: {pdf_path}")
-
-        try:
-            reader = PdfReader(pdf_path)
-
-            text_parts = []
-
-            for page_num, page in enumerate(reader.pages):
-                page_text = page.extract_text() or ""
-
-                if page_text.strip():
-                    text_parts.append(page_text)
-
-            text = "\n".join(text_parts)
-
-            if not text.strip():
-                raise ValueError("No text could be extracted from PDF")
-
-            return text
-
-        except Exception as e:
-            logger.exception("Failed to extract PDF text")
-            raise RuntimeError(f"PDF extraction failed: {e}")
+        return load_document(file_path)
 
     # -------------------------------------------------------------------------
-    # Chunking
+    # Step 2 — Chunk
     # -------------------------------------------------------------------------
 
-    def chunk_text(
-        self,
-        text: str,
-        chunk_size: int = 1000,
-        overlap: int = 200,
-    ) -> List[str]:
+    def chunk_documents(self, docs: list[Document]) -> list[Document]:
         """
-        Character-based chunking.
+        Split documents into smaller chunks using RecursiveCharacterTextSplitter.
 
-        For even better retrieval quality consider replacing this
-        with RecursiveCharacterTextSplitter from LangChain.
+        Tries to break on: paragraphs → sentences → words → characters.
+        Metadata from the parent Document is carried forward into every chunk.
+
+        Example chunk metadata (PDF):
+            {"source": "report.pdf", "page": 3}
+
+        Example chunk metadata (DOCX):
+            {"source": "notes.docx", "page_number": 2, "category": "NarrativeText"}
         """
+        chunks = self.splitter.split_documents(docs)
 
-        chunks = []
+        if not chunks:
+            raise ValueError("Chunking produced no output — document may be empty")
 
-        start = 0
-
-        while start < len(text):
-            end = start + chunk_size
-
-            chunk = text[start:end].strip()
-
-            if chunk:
-                chunks.append(chunk)
-
-            start = end - overlap
-
+        logger.info(
+            "Split %d element(s) into %d chunk(s)",
+            len(docs),
+            len(chunks),
+        )
         return chunks
 
     # -------------------------------------------------------------------------
-    # Embeddings
+    # Step 3 — Embed
     # -------------------------------------------------------------------------
 
-    def embed_chunks(
-        self,
-        chunks: List[str],
-        batch_size: int = 32,
-    ) -> List[List[float]]:
+    def embed_chunks(self, chunks: list[Document]) -> list[list[float]]:
         """
-        Generate embeddings in batches.
+        Generate embeddings for each chunk's text content.
         """
+        texts = [chunk.page_content for chunk in chunks]
 
         try:
             embeddings = self.model.encode(
-                chunks,
-                batch_size=batch_size,
+                texts,
+                batch_size=settings.EMBEDDING_BATCH_SIZE,
                 show_progress_bar=False,
                 convert_to_numpy=True,
             )
-
             return embeddings.tolist()
 
         except Exception as e:
             logger.exception("Embedding generation failed")
-            raise RuntimeError(f"Embedding failed: {e}")
+            raise RuntimeError(f"Embedding failed: {e}") from e
 
     # -------------------------------------------------------------------------
-    # Storage
+    # Step 4 — Store
     # -------------------------------------------------------------------------
 
     def store_in_chromadb(
         self,
         collection_name: str,
         document_id: str,
-        filename: str,
-        chunks: List[str],
-        embeddings: List[List[float]],
-    ):
+        chunks: list[Document],
+        embeddings: list[list[float]],
+    ) -> chromadb.Collection:
         """
-        Store embeddings and chunks in ChromaDB.
-        """
+        Persist chunks + embeddings in ChromaDB.
 
-        try:
-            collection = self.client.get_or_create_collection(
-                name=collection_name
+        Each stored record includes:
+            - The chunk text
+            - Its embedding vector
+            - Metadata: document_id, filename, chunk_index,
+                        page_number (PDF) or element category (DOCX)
+        """
+        if len(chunks) != len(embeddings):
+            raise ValueError(
+                f"Chunk/embedding count mismatch: "
+                f"{len(chunks)} chunks vs {len(embeddings)} embeddings"
             )
 
-            ids = [
-                f"{document_id}_{uuid.uuid4()}"
-                for _ in chunks
-            ]
+        try:
+            collection = self.client.get_or_create_collection(name=collection_name)
 
-            metadatas = [
-                {
-                    "document_id": document_id,
-                    "filename": filename,
-                    "chunk_index": idx,
+            ids = [f"{document_id}_{uuid.uuid4()}" for _ in chunks]
+
+            metadatas = []
+            for idx, chunk in enumerate(chunks):
+                meta = chunk.metadata or {}
+
+                record = {
+                    "document_id":  document_id,
+                    "filename":     str(meta.get("source", "unknown")),
+                    "chunk_index":  idx,
                 }
-                for idx in range(len(chunks))
-            ]
+
+                # PDF — page is 0-indexed, store as 1-indexed for humans
+                if "page" in meta:
+                    record["page_number"] = meta["page"] + 1
+
+                # DOCX — page_number is already 1-indexed from Unstructured
+                if "page_number" in meta:
+                    record["page_number"] = meta["page_number"]
+
+                # DOCX — structural category e.g. "Title", "NarrativeText"
+                if "category" in meta:
+                    record["category"] = meta["category"]
+
+                metadatas.append(record)
 
             collection.add(
                 ids=ids,
-                documents=chunks,
+                documents=[c.page_content for c in chunks],
                 embeddings=embeddings,
                 metadatas=metadatas,
             )
 
             logger.info(
-                "Stored %s chunks in collection '%s'",
+                "Stored %d chunks in collection '%s'",
                 len(chunks),
                 collection_name,
             )
-
             return collection
 
         except Exception as e:
-            logger.exception("Failed to store vectors")
-            raise RuntimeError(f"Vector storage failed: {e}")
+            logger.exception("Failed to store vectors in ChromaDB")
+            raise RuntimeError(f"Vector storage failed: {e}") from e
 
     # -------------------------------------------------------------------------
     # Main Pipeline
     # -------------------------------------------------------------------------
 
-    def process_pdf(
+    def process(
         self,
-        pdf_path: str,
+        file_path: str,
         collection_name: str,
-        document_id: str | None = None,
-    ):
+        document_id: Optional[str] = None,
+    ) -> dict:
         """
-        Full ingestion pipeline.
+        Full ingestion pipeline: load → chunk → embed → store.
+
+        Args:
+            file_path:        Path to a .pdf or .docx file.
+            collection_name:  ChromaDB collection to store chunks in.
+            document_id:      Optional stable ID; auto-generated if omitted.
+
+        Returns a summary dict.
         """
+        from pathlib import Path
 
         document_id = document_id or str(uuid.uuid4())
-
-        logger.info("Processing PDF: %s", pdf_path)
-
-        text = self.extract_pdf_text(pdf_path)
+        file_name   = Path(file_path).name
+        file_type   = Path(file_path).suffix.lower().lstrip(".")
 
         logger.info(
-            "Extracted %s characters",
-            len(text),
+            "Starting pipeline — file: %s | collection: %s | doc_id: %s",
+            file_name,
+            collection_name,
+            document_id,
         )
 
-        chunks = self.chunk_text(
-            text=text,
-            chunk_size=1000,
-            overlap=200,
-        )
+        # 1. Load
+        docs = self.load(file_path)
+        logger.info("Loaded %d element(s)", len(docs))
 
-        logger.info(
-            "Created %s chunks",
-            len(chunks),
-        )
+        # 2. Chunk
+        chunks = self.chunk_documents(docs)
+        logger.info("Created %d chunk(s)", len(chunks))
 
+        # 3. Embed
         embeddings = self.embed_chunks(chunks)
+        logger.info("Generated %d embedding(s)", len(embeddings))
 
-        logger.info(
-            "Generated %s embeddings",
-            len(embeddings),
-        )
-
-        collection = self.store_in_chromadb(
+        # 4. Store
+        self.store_in_chromadb(
             collection_name=collection_name,
             document_id=document_id,
-            filename=Path(pdf_path).name,
             chunks=chunks,
             embeddings=embeddings,
         )
 
-        logger.info(
-            "PDF processing complete. Document ID: %s",
-            document_id,
-        )
+        logger.info("Pipeline complete — document_id: %s", document_id)
 
         return {
-            "document_id": document_id,
-            "collection": collection,
-            "chunks": len(chunks),
+            "document_id":     document_id,
+            "collection_name": collection_name,
+            "source_file":     file_name,
+            "file_type":       file_type,
+            "elements_loaded": len(docs),
+            "chunks_stored":   len(chunks),
         }
-
-
-# -----------------------------------------------------------------------------
-# Example Usage
-# -----------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    processor = PDFProcessor()
-
-    result = processor.process_pdf(
-        pdf_path="sample_pdf.pdf",
-        collection_name="biology_101",
-    )
-
-    print(result)
