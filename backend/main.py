@@ -1,0 +1,154 @@
+# backend/main.py
+
+import logging
+import uuid
+from pathlib import Path
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+
+from config import settings
+from services.process_document import DocumentProcessor
+
+# -----------------------------------------------------------------------------
+# App Setup
+# -----------------------------------------------------------------------------
+
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    debug=settings.DEBUG,
+)
+
+# Single shared processor instance — loads the embedding model once on startup
+processor = DocumentProcessor()
+
+SUPPORTED_TYPES = {
+    "application/pdf":                                                   ".pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+}
+
+
+# -----------------------------------------------------------------------------
+# Routes
+# -----------------------------------------------------------------------------
+
+@app.get("/health")
+def health():
+    """Quick liveness check."""
+    return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    collection_name: str = Form(...),
+    document_id: str = Form(None),
+):
+    """
+    Upload a PDF or DOCX file and ingest it into ChromaDB.
+
+    Form fields:
+        file            — the document (.pdf or .docx)
+        collection_name — ChromaDB collection to store chunks in
+        document_id     — optional stable ID; auto-generated if omitted
+    """
+
+    # ── Validate content type ──────────────────────────────────────────────
+    if file.content_type not in SUPPORTED_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"Unsupported file type '{file.content_type}'. "
+                f"Accepted: PDF, DOCX"
+            ),
+        )
+
+    ext = SUPPORTED_TYPES[file.content_type]
+
+    # ── Save upload to disk ────────────────────────────────────────────────
+    upload_dir = Path(settings.UPLOAD_DIR)
+    safe_name  = f"{uuid.uuid4()}{ext}"
+    save_path  = upload_dir / safe_name
+
+    try:
+        contents = await file.read()
+
+        # Enforce size limit before writing
+        size_mb = len(contents) / (1024 * 1024)
+        if size_mb > settings.MAX_FILE_SIZE_MB:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"File size {size_mb:.1f} MB exceeds "
+                    f"the {settings.MAX_FILE_SIZE_MB} MB limit"
+                ),
+            )
+
+        save_path.write_bytes(contents)
+        logger.info("Saved upload to %s", save_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to save uploaded file")
+        raise HTTPException(status_code=500, detail=f"File save failed: {e}")
+
+    # ── Run ingestion pipeline ─────────────────────────────────────────────
+    try:
+        result = processor.process(
+            file_path=str(save_path),
+            collection_name=collection_name,
+            document_id=document_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("Processing failed for %s", save_path)
+        raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
+    finally:
+        # Always clean up the temp file whether processing succeeded or not
+        if save_path.exists():
+            save_path.unlink()
+            logger.info("Cleaned up temp file %s", save_path)
+
+    return JSONResponse(status_code=200, content=result)
+
+
+@app.get("/collections/{collection_name}")
+def collection_info(collection_name: str):
+    """
+    Return the number of chunks stored in a collection.
+    """
+    try:
+        collection = processor.client.get_collection(name=collection_name)
+        return {
+            "collection_name": collection_name,
+            "chunks": collection.count(),
+        }
+    except Exception:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Collection '{collection_name}' not found",
+        )
+
+
+@app.delete("/collections/{collection_name}")
+def delete_collection(collection_name: str):
+    """
+    Delete a collection and all its vectors.
+    """
+    try:
+        processor.client.delete_collection(name=collection_name)
+        return {"deleted": collection_name}
+    except Exception:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Collection '{collection_name}' not found",
+        )

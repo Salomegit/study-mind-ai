@@ -20,7 +20,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 
 from config import settings
-from backend.loaders import load_document
+from loaders.loaders import load_document
 
 # -----------------------------------------------------------------------------
 # Logging

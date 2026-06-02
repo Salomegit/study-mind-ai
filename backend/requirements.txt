@@ -1,6 +1,9 @@
 # requirements.txt
 
-# Core
+Core
+fastapi
+uvicorn[standard]
+python-multipart        # required for file uploads
 chromadb
 sentence-transformers
 pydantic-settings
