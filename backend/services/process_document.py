@@ -67,7 +67,7 @@ class DocumentProcessor:
         self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
 
         logger.info("Initializing ChromaDB at: %s", settings.CHROMA_DB_PATH)
-        self.client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
+        self.client = chromadb.Client()
 
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.CHUNK_SIZE,
