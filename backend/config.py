@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Uploads
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE_MB: int = 20
+    GEMINI_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

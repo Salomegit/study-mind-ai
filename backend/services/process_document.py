@@ -15,6 +15,7 @@ import uuid
 from typing import Optional
 
 import chromadb
+from chromadb.utils import embedding_functions
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
@@ -67,7 +68,13 @@ class DocumentProcessor:
         self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
 
         logger.info("Initializing ChromaDB at: %s", settings.CHROMA_DB_PATH)
-        self.client = chromadb.Client()
+        self.client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
+
+        # Register an embedding function with ChromaDB so collections
+        # created by the ingestion pipeline use the same model as queries.
+        self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=settings.EMBEDDING_MODEL
+        )
 
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.CHUNK_SIZE,
@@ -165,7 +172,11 @@ class DocumentProcessor:
             )
 
         try:
-            collection = self.client.get_or_create_collection(name=collection_name)
+            collection = self.client.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=self.embedding_function,
+            )
 
             ids = [f"{document_id}_{uuid.uuid4()}" for _ in chunks]
 

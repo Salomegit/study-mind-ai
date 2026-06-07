@@ -33,11 +33,12 @@ app = FastAPI(
 processor = DocumentProcessor()
 
 # Initialize RAG Q&A Bot with Gemini API key
-gemini_api_key = os.getenv("GEMINI_API_KEY")
+# Read from pydantic settings so .env is loaded correctly.
+gemini_api_key = settings.GEMINI_API_KEY
 if not gemini_api_key:
-    raise ValueError("GEMINI_API_KEY environment variable not set!")
+    raise ValueError("GEMINI_API_KEY environment variable not set! Define it in .env or export it in your shell.")
 
-qa_bot = RAGQABot(api_key=gemini_api_key)
+qa_bot = RAGQABot(api_key=gemini_api_key, chroma_path=settings.CHROMA_DB_PATH)
 
 SUPPORTED_TYPES = {
     "application/pdf":                                                   ".pdf",

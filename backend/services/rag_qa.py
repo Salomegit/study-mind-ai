@@ -4,6 +4,7 @@ import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.utils import embedding_functions
+from config import settings
 
 
 class RAGQABot:
@@ -17,15 +18,15 @@ class RAGQABot:
         """
         # Configure Gemini
         genai.configure(api_key=api_key)
-        self.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        self.gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 
         # Persistent ChromaDB client — data is saved to disk
         self.chroma_client = chromadb.PersistentClient(path=chroma_path)
 
-        # Register embedding function with ChromaDB
+        # Register embedding function with ChromaDB using configured model
         # This ensures the same model is used for both storing and querying
         self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
+            model_name=settings.EMBEDDING_MODEL
         )
 
     # ------------------------------------------------------------------
