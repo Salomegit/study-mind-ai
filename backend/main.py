@@ -1,14 +1,17 @@
 # backend/main.py
 
 import logging
+import os
 import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from config import settings
 from services.process_document import DocumentProcessor
+from services.rag_qa import RAGQABot
 
 # -----------------------------------------------------------------------------
 # App Setup
@@ -29,10 +32,27 @@ app = FastAPI(
 # Single shared processor instance — loads the embedding model once on startup
 processor = DocumentProcessor()
 
+# Initialize RAG Q&A Bot with Gemini API key
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+if not gemini_api_key:
+    raise ValueError("GEMINI_API_KEY environment variable not set!")
+
+qa_bot = RAGQABot(api_key=gemini_api_key)
+
 SUPPORTED_TYPES = {
     "application/pdf":                                                   ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
 }
+
+
+# -----------------------------------------------------------------------------
+# Pydantic Models
+# -----------------------------------------------------------------------------
+
+class QuestionRequest(BaseModel):
+    """Request model for Q&A endpoint."""
+    collection: str
+    question: str
 
 
 # -----------------------------------------------------------------------------
@@ -119,6 +139,46 @@ async def upload_document(
             logger.info("Cleaned up temp file %s", save_path)
 
     return JSONResponse(status_code=200, content=result)
+
+
+@app.post("/ask")
+def ask_question(request: QuestionRequest):
+    """
+    Ask a question about an uploaded document.
+    
+    The system will:
+    1. Search the collection for relevant chunks
+    2. Send them + your question to Gemini
+    3. Return a grounded answer with sources
+    
+    Request body:
+        collection — name of the ChromaDB collection (from /upload)
+        question   — your question about the document
+    """
+    logger.info(
+        "Question received - collection: %s, question: %s",
+        request.collection,
+        request.question[:50] + "..." if len(request.question) > 50 else request.question
+    )
+    
+    try:
+        # Call the RAG Q&A bot
+        result = qa_bot.ask(request.question, request.collection)
+        
+        # Log success
+        logger.info(
+            "Answer generated - chunks_retrieved: %d",
+            result.get("num_chunks_retrieved", 0)
+        )
+        
+        return JSONResponse(status_code=200, content=result)
+    
+    except Exception as e:
+        logger.exception("Q&A processing failed for collection %s", request.collection)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Q&A processing failed: {str(e)}"
+        )
 
 
 @app.get("/collections/{collection_name}")
