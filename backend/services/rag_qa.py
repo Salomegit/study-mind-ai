@@ -163,7 +163,6 @@ class RAGQABot:
         for i, chunk in enumerate(chunks):
             score = chunk["similarity_score"]
 
-            # 🔴 FIX 1: Match actual metadata keys used during ingestion
             # Fallback chain: filename → source → "Unknown source"
             source = chunk["metadata"].get("filename",
                      chunk["metadata"].get("source", "Unknown source"))
