@@ -12,6 +12,7 @@ Flow:
 
 import logging
 import uuid
+import re
 from typing import Optional
 
 import chromadb
@@ -33,6 +34,20 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def sanitise_collection_name(name: str) -> str:
+    """Convert any user-facing subject name to a valid ChromaDB collection name."""
+    # Replace spaces and invalid chars with hyphens
+    sanitised = re.sub(r'[^a-zA-Z0-9._-]', '-', name.strip())
+    # Collapse multiple hyphens
+    sanitised = re.sub(r'-+', '-', sanitised)
+    # Strip leading/trailing hyphens (ChromaDB requires alphanum at start/end)
+    sanitised = sanitised.strip('-')
+    # Enforce minimum length of 3
+    if len(sanitised) < 3:
+        sanitised = sanitised + '-01'
+    return sanitised[:512]
 
 
 # -----------------------------------------------------------------------------
@@ -172,8 +187,12 @@ class DocumentProcessor:
             )
 
         try:
+            safe_name = sanitise_collection_name(collection_name)
+            if safe_name != collection_name:
+                logger.info("Sanitised collection name '%s' -> '%s'", collection_name, safe_name)
+
             collection = self.client.get_or_create_collection(
-                name=collection_name,
+                name=safe_name,
                 metadata={"hnsw:space": "cosine"},
                 embedding_function=self.embedding_function,
             )
@@ -214,7 +233,7 @@ class DocumentProcessor:
             logger.info(
                 "Stored %d chunks in collection '%s'",
                 len(chunks),
-                collection_name,
+                safe_name,
             )
             return collection
 

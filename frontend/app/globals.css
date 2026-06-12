@@ -1,37 +1,63 @@
 /* app/globals.css */
 @import "tailwindcss";
 
-/* Define your bold colors using CSS variables and @theme */
 :root {
-  --primary: #FF6B35;
-  --secondary: #4A0E4E;
-  --accent: #00C2BA;
-  --background: #0F172A;
-  --surface: #1E293B;
-  --text: #F8FAFC;
-  --text-muted: #94A3B8;
-  --border: #334155;
-  --success: #10B981;
-  --error: #EF4444;
+  /* Coolors palette */
+  --primary: #DA667B;      /* CTA */
+  --secondary: #71816D;    /* Sage green */
+  --accent: #342A21;       /* Dark brown */
+  --background: #F1E0C5;   /* Cream */
+  --surface: #FFFFFF;
+  --card: #C9B79C;
+
+  --text: #342A21;
+  --text-muted: #6B6258;
+  --border: #D8C9B0;
+
+  --success: #71816D;
+  --error: #DA667B;
 }
 
 @theme {
   --color-primary: var(--primary);
   --color-secondary: var(--secondary);
   --color-accent: var(--accent);
+
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-card: var(--card);
+
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
   --color-border: var(--border);
+
   --color-success: var(--success);
   --color-error: var(--error);
 }
 
-body {
-  background-color: var(--background);
-  color: var(--text);
-  font-family: 'Inter', system-ui, sans-serif;
+html {
+  scroll-behavior: smooth;
 }
 
-/* scrollbar etc – same as before */
+body {
+  background: var(--background);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--card);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary);
+}
