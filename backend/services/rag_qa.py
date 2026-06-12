@@ -6,6 +6,9 @@ import chromadb
 from chromadb.utils import embedding_functions
 from config import settings
 
+# 🔴 FIX 2: Minimum similarity threshold — chunks below this score are filtered out
+MIN_SIMILARITY = 0.65
+
 
 class RAGQABot:
     def __init__(self, api_key: str, chroma_path: str = "./chroma_db"):
@@ -77,7 +80,7 @@ class RAGQABot:
             chunks:          List of text chunks from your document processor
             ids:             Unique ID per chunk e.g. ["doc1_chunk_0", "doc1_chunk_1"]
             metadatas:       Optional list of dicts with extra info per chunk
-                             e.g. [{"source": "notes.pdf", "page": 1}, ...]
+                             e.g. [{"filename": "notes.pdf", "page_number": 1}, ...]
         """
         try:
             collection = self.get_or_create_collection(collection_name)
@@ -112,10 +115,10 @@ class RAGQABot:
         so short questions can still match long document chunks correctly.
         """
         try:
-            collection = self.chroma_client.get_collection(
-                name=collection_name,
-                embedding_function=self.embedding_function
-            )
+            # 🟡 FIX 3: Use get_or_create_collection instead of get_collection
+            # to guarantee the same embedding function is used at query time
+            # as was used at ingestion time — prevents silent vector space mismatch
+            collection = self.get_or_create_collection(collection_name)
 
             results = collection.query(
                 query_texts=[question],  # ChromaDB auto-embeds this
@@ -159,8 +162,14 @@ class RAGQABot:
         context_parts = []
         for i, chunk in enumerate(chunks):
             score = chunk["similarity_score"]
-            source = chunk["metadata"].get("source", "Unknown source")
-            page = chunk["metadata"].get("page", "")
+
+            # Fallback chain: filename → source → "Unknown source"
+            source = chunk["metadata"].get("filename",
+                     chunk["metadata"].get("source", "Unknown source"))
+            # Fallback chain: page_number → page → ""
+            page = chunk["metadata"].get("page_number",
+                   chunk["metadata"].get("page", ""))
+
             page_info = f" | Page {page}" if page else ""
             context_parts.append(
                 f"[Chunk {i + 1} | Source: {source}{page_info} | Relevance: {score}]\n{chunk['text']}"
@@ -176,9 +185,10 @@ class RAGQABot:
         Full RAG pipeline:
         1. Embed the question
         2. Retrieve top_k most similar chunks from ChromaDB
-        3. Build context from chunks
-        4. Send context + question to Gemini
-        5. Return structured response
+        3. Filter chunks below similarity threshold
+        4. Build context from chunks
+        5. Send context + question to Gemini
+        6. Return structured response
 
         Args:
             question:        The user's question
@@ -197,8 +207,25 @@ class RAGQABot:
                 "error": "No chunks retrieved from ChromaDB"
             }
 
-        # Step 3 — Build context
-        context = self.build_context(chunks)
+        # 🔴 FIX 2: Filter out low-relevance chunks before sending to Gemini
+        # Chunks below MIN_SIMILARITY are noise and produce wrong answers
+        filtered_chunks = [c for c in chunks if c["similarity_score"] >= MIN_SIMILARITY]
+
+        if not filtered_chunks:
+            return {
+                "question": question,
+                "answer": (
+                    f"No sufficiently relevant information found. "
+                    f"Best match score was {chunks[0]['similarity_score']:.2f} "
+                    f"(minimum required: {MIN_SIMILARITY})."
+                ),
+                "sources": [],
+                "num_chunks_retrieved": 0,
+                "top_similarity_score": chunks[0]["similarity_score"]
+            }
+
+        # Step 3 — Build context from filtered chunks only
+        context = self.build_context(filtered_chunks)
 
         # Step 4 — Build prompt and call Gemini
         prompt = f"""You are a study assistant helping KCSE students, university students, and researchers.
@@ -231,17 +258,26 @@ Answer:"""
                         "similarity_score": c["similarity_score"],
                         "metadata": c["metadata"]
                     }
-                    for c in chunks
+                    for c in filtered_chunks
                 ],
-                "num_chunks_retrieved": len(chunks),
-                "top_similarity_score": chunks[0]["similarity_score"] if chunks else 0
+                "num_chunks_retrieved": len(filtered_chunks),
+                "top_similarity_score": filtered_chunks[0]["similarity_score"]
             }
 
         except Exception as e:
             return {
                 "question": question,
                 "answer": f"Error calling Gemini API: {str(e)}",
-                "sources": [c["text"] for c in chunks],
-                "num_chunks_retrieved": len(chunks),
+                # Fixed: return structured sources, not raw text
+                "sources": [
+                    {
+                        "chunk_id": c["chunk_id"],
+                        "text_preview": c["text"][:200] + "..." if len(c["text"]) > 200 else c["text"],
+                        "similarity_score": c["similarity_score"],
+                        "metadata": c["metadata"]
+                    }
+                    for c in filtered_chunks
+                ],
+                "num_chunks_retrieved": len(filtered_chunks),
                 "error": str(e)
             }
