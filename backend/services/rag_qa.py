@@ -5,6 +5,8 @@ from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.utils import embedding_functions
 from config import settings
+from .utils import sanitise_collection_name
+from .prompts import build_prompt
 
 # 🔴 FIX 2: Minimum similarity threshold — chunks below this score are filtered out
 MIN_SIMILARITY = 0.65
@@ -42,8 +44,9 @@ class RAGQABot:
         - Cosine similarity (better for text than default L2)
         - Registered embedding function (auto-embeds on add and query)
         """
+        safe_name = sanitise_collection_name(collection_name)
         return self.chroma_client.get_or_create_collection(
-            name=collection_name,
+            name=safe_name,
             metadata={"hnsw:space": "cosine"},
             embedding_function=self.embedding_function
         )
@@ -51,8 +54,9 @@ class RAGQABot:
     def delete_collection(self, collection_name: str) -> dict:
         """Delete a collection and all its documents."""
         try:
-            self.chroma_client.delete_collection(collection_name)
-            return {"success": True, "message": f"Collection '{collection_name}' deleted."}
+            safe_name = sanitise_collection_name(collection_name)
+            self.chroma_client.delete_collection(safe_name)
+            return {"success": True, "message": f"Collection '{safe_name}' deleted."}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -227,22 +231,9 @@ class RAGQABot:
         # Step 3 — Build context from filtered chunks only
         context = self.build_context(filtered_chunks)
 
-        # Step 4 — Build prompt and call Gemini
-        prompt = f"""You are a study assistant helping KCSE students, university students, and researchers.
-Answer questions based ONLY on the provided document chunks below.
-
-Rules:
-- If the answer is not in the provided chunks, say "This information is not in the provided document."
-- Always cite which chunk(s) your answer came from e.g. (Chunk 1) or (Chunk 2, Chunk 3).
-- Keep answers clear, accurate, and easy to understand.
-- For KCSE students, use simple language. For university/research, be more detailed.
-
-Document chunks:
-{context}
-
-Question: {question}
-
-Answer:"""
+        # Step 4 — Classify question type and build tailored prompt
+        best_score = filtered_chunks[0]["similarity_score"]
+        prompt = build_prompt(question, context, best_score)
 
         try:
             response = self.gemini_model.generate_content(prompt)

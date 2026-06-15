@@ -23,6 +23,7 @@ from sentence_transformers import SentenceTransformer
 
 from config import settings
 from loaders.loaders import load_document
+from services.utils import sanitise_collection_name
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -34,20 +35,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-
-def sanitise_collection_name(name: str) -> str:
-    """Convert any user-facing subject name to a valid ChromaDB collection name."""
-    # Replace spaces and invalid chars with hyphens
-    sanitised = re.sub(r'[^a-zA-Z0-9._-]', '-', name.strip())
-    # Collapse multiple hyphens
-    sanitised = re.sub(r'-+', '-', sanitised)
-    # Strip leading/trailing hyphens (ChromaDB requires alphanum at start/end)
-    sanitised = sanitised.strip('-')
-    # Enforce minimum length of 3
-    if len(sanitised) < 3:
-        sanitised = sanitised + '-01'
-    return sanitised[:512]
 
 
 # -----------------------------------------------------------------------------

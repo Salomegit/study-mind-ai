@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from config import settings
 from services.process_document import DocumentProcessor
 from services.rag_qa import RAGQABot
+from services.utils import sanitise_collection_name
 
 # -----------------------------------------------------------------------------
 # App Setup
@@ -203,9 +204,10 @@ def collection_info(collection_name: str):
     Return the number of chunks stored in a collection.
     """
     try:
-        collection = processor.client.get_collection(name=collection_name)
+        safe_name = sanitise_collection_name(collection_name)
+        collection = processor.client.get_collection(name=safe_name)
         return {
-            "collection_name": collection_name,
+            "collection_name": safe_name,
             "chunks": collection.count(),
         }
     except Exception:
@@ -221,8 +223,9 @@ def delete_collection(collection_name: str):
     Delete a collection and all its vectors.
     """
     try:
-        processor.client.delete_collection(name=collection_name)
-        return {"deleted": collection_name}
+        safe_name = sanitise_collection_name(collection_name)
+        processor.client.delete_collection(name=safe_name)
+        return {"deleted": safe_name}
     except Exception:
         raise HTTPException(
             status_code=404,
