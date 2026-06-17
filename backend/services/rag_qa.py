@@ -1,15 +1,19 @@
 # backend/services/rag_qa.py
 
+import logging
 import google.generativeai as genai
-from sentence_transformers import SentenceTransformer
-import chromadb
 from chromadb.utils import embedding_functions
+import chromadb
+
 from config import settings
 from .utils import sanitise_collection_name
 from .prompts import build_prompt
+from .input_guard import sanitise_output  # Layer 4: output post-processing
 
-# 🔴 FIX 2: Minimum similarity threshold — chunks below this score are filtered out
-MIN_SIMILARITY = 0.65
+logger = logging.getLogger(__name__)
+
+# Minimum similarity score — chunks below this are filtered before Gemini sees them
+MIN_SIMILARITY = 0.30  # Lowered from 0.65 to handle structural questions
 
 
 class RAGQABot:
@@ -21,15 +25,11 @@ class RAGQABot:
         - SentenceTransformer embedding function registered with ChromaDB
         - Gemini as the LLM for answer generation
         """
-        # Configure Gemini
         genai.configure(api_key=api_key)
         self.gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 
-        # Persistent ChromaDB client — data is saved to disk
         self.chroma_client = chromadb.PersistentClient(path=chroma_path)
 
-        # Register embedding function with ChromaDB using configured model
-        # This ensures the same model is used for both storing and querying
         self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=settings.EMBEDDING_MODEL
         )
@@ -39,11 +39,6 @@ class RAGQABot:
     # ------------------------------------------------------------------
 
     def get_or_create_collection(self, collection_name: str):
-        """
-        Get an existing collection or create a new one with:
-        - Cosine similarity (better for text than default L2)
-        - Registered embedding function (auto-embeds on add and query)
-        """
         safe_name = sanitise_collection_name(collection_name)
         return self.chroma_client.get_or_create_collection(
             name=safe_name,
@@ -52,7 +47,6 @@ class RAGQABot:
         )
 
     def delete_collection(self, collection_name: str) -> dict:
-        """Delete a collection and all its documents."""
         try:
             safe_name = sanitise_collection_name(collection_name)
             self.chroma_client.delete_collection(safe_name)
@@ -61,7 +55,6 @@ class RAGQABot:
             return {"success": False, "error": str(e)}
 
     def list_collections(self) -> list[str]:
-        """List all available collections."""
         return [col.name for col in self.chroma_client.list_collections()]
 
     # ------------------------------------------------------------------
@@ -75,17 +68,6 @@ class RAGQABot:
         ids: list[str],
         metadatas: list[dict] | None = None
     ) -> dict:
-        """
-        Add document chunks to a collection.
-        ChromaDB auto-embeds the chunks using the registered embedding function.
-
-        Args:
-            collection_name: Target collection
-            chunks:          List of text chunks from your document processor
-            ids:             Unique ID per chunk e.g. ["doc1_chunk_0", "doc1_chunk_1"]
-            metadatas:       Optional list of dicts with extra info per chunk
-                             e.g. [{"filename": "notes.pdf", "page_number": 1}, ...]
-        """
         try:
             collection = self.get_or_create_collection(collection_name)
             collection.add(
@@ -109,23 +91,17 @@ class RAGQABot:
         self,
         question: str,
         collection_name: str,
-        top_k: int = 5
+        top_k: int = 8,  # Increased from 5 for better recall
     ) -> list[dict]:
         """
         Search ChromaDB for chunks most similar to the question.
         Returns list of dicts with chunk text, similarity score, and metadata.
-
-        Uses cosine similarity — direction-based, not magnitude-based,
-        so short questions can still match long document chunks correctly.
         """
         try:
-            # 🟡 FIX 3: Use get_or_create_collection instead of get_collection
-            # to guarantee the same embedding function is used at query time
-            # as was used at ingestion time — prevents silent vector space mismatch
             collection = self.get_or_create_collection(collection_name)
 
             results = collection.query(
-                query_texts=[question],  # ChromaDB auto-embeds this
+                query_texts=[question],
                 n_results=top_k,
                 include=["documents", "distances", "metadatas"]
             )
@@ -133,10 +109,9 @@ class RAGQABot:
             if not results or not results["ids"] or len(results["ids"][0]) == 0:
                 return []
 
-            # Format results — convert cosine distance to similarity score
             formatted = []
             for i in range(len(results["ids"][0])):
-                similarity_score = 1 - results["distances"][0][i]  # higher = more similar
+                similarity_score = 1 - results["distances"][0][i]
                 formatted.append({
                     "chunk_id": results["ids"][0][i],
                     "text": results["documents"][0][i],
@@ -145,12 +120,11 @@ class RAGQABot:
                     "metadata": results["metadatas"][0][i] if results["metadatas"] else {}
                 })
 
-            # Sort by similarity score descending (best match first)
             formatted.sort(key=lambda x: x["similarity_score"], reverse=True)
             return formatted
 
         except Exception as e:
-            print(f"Error searching ChromaDB: {e}")
+            logger.error("Error searching ChromaDB: %s", e)
             return []
 
     # ------------------------------------------------------------------
@@ -158,22 +132,14 @@ class RAGQABot:
     # ------------------------------------------------------------------
 
     def build_context(self, chunks: list[dict]) -> str:
-        """
-        Combine retrieved chunks into a single context string for the LLM.
-        Labels each chunk so Gemini can cite sources in its answer.
-        Also includes similarity score so you can see relevance at a glance.
-        """
+        """Combine retrieved chunks into a single labelled context string."""
         context_parts = []
         for i, chunk in enumerate(chunks):
             score = chunk["similarity_score"]
-
-            # Fallback chain: filename → source → "Unknown source"
             source = chunk["metadata"].get("filename",
                      chunk["metadata"].get("source", "Unknown source"))
-            # Fallback chain: page_number → page → ""
             page = chunk["metadata"].get("page_number",
                    chunk["metadata"].get("page", ""))
-
             page_info = f" | Page {page}" if page else ""
             context_parts.append(
                 f"[Chunk {i + 1} | Source: {source}{page_info} | Relevance: {score}]\n{chunk['text']}"
@@ -184,22 +150,21 @@ class RAGQABot:
     # Main Q&A method
     # ------------------------------------------------------------------
 
-    def ask(self, question: str, collection_name: str, top_k: int = 5) -> dict:
+    def ask(self, question: str, collection_name: str, top_k: int = 8) -> dict:
         """
         Full RAG pipeline:
-        1. Embed the question
-        2. Retrieve top_k most similar chunks from ChromaDB
-        3. Filter chunks below similarity threshold
-        4. Build context from chunks
-        5. Send context + question to Gemini
-        6. Return structured response
+        1. Retrieve top_k most similar chunks from ChromaDB
+        2. Filter chunks below similarity threshold
+        3. Build context from chunks
+        4. Build structured prompt (with injection-resistant delimiters)
+        5. Send to Gemini
+        6. Post-process output to redact sensitive patterns (Layer 4)
+        7. Return structured response
 
-        Args:
-            question:        The user's question
-            collection_name: ChromaDB collection to search in
-            top_k:           Number of chunks to retrieve (default 5)
+        NOTE: Input validation (Layer 2) happens upstream in main.py
+        before this method is called.
         """
-        # Step 1 & 2 — Retrieve relevant chunks
+        # Step 1 — Retrieve
         chunks = self.search_chunks(question, collection_name, top_k=top_k)
 
         if not chunks:
@@ -211,33 +176,45 @@ class RAGQABot:
                 "error": "No chunks retrieved from ChromaDB"
             }
 
-        # 🔴 FIX 2: Filter out low-relevance chunks before sending to Gemini
-        # Chunks below MIN_SIMILARITY are noise and produce wrong answers
+        # Step 2 — Filter low-relevance chunks
         filtered_chunks = [c for c in chunks if c["similarity_score"] >= MIN_SIMILARITY]
 
         if not filtered_chunks:
+            best = chunks[0]["similarity_score"]
+            logger.info(
+                "All chunks below threshold. Best score: %.4f, question: %s",
+                best, question[:60]
+            )
             return {
                 "question": question,
                 "answer": (
-                    f"No sufficiently relevant information found. "
-                    f"Best match score was {chunks[0]['similarity_score']:.2f} "
-                    f"(minimum required: {MIN_SIMILARITY})."
+                    "I couldn't find sufficiently relevant information for that question "
+                    "in your study materials. Try rephrasing or uploading more materials."
                 ),
                 "sources": [],
                 "num_chunks_retrieved": 0,
-                "top_similarity_score": chunks[0]["similarity_score"]
+                "top_similarity_score": best
             }
 
-        # Step 3 — Build context from filtered chunks only
+        # Step 3 — Build context
         context = self.build_context(filtered_chunks)
 
-        # Step 4 — Classify question type and build tailored prompt
+        # Step 4 — Build injection-resistant structured prompt
         best_score = filtered_chunks[0]["similarity_score"]
         prompt = build_prompt(question, context, best_score)
 
         try:
+            # Step 5 — Call Gemini
             response = self.gemini_model.generate_content(prompt)
-            answer = response.text
+            raw_answer = response.text
+
+            # Step 6 — Post-process output (Layer 4: redact sensitive patterns)
+            answer = sanitise_output(raw_answer)
+
+            logger.info(
+                "Answer generated — collection: %s | chunks: %d | top_score: %.4f",
+                collection_name, len(filtered_chunks), best_score
+            )
 
             return {
                 "question": question,
@@ -252,14 +229,14 @@ class RAGQABot:
                     for c in filtered_chunks
                 ],
                 "num_chunks_retrieved": len(filtered_chunks),
-                "top_similarity_score": filtered_chunks[0]["similarity_score"]
+                "top_similarity_score": best_score
             }
 
         except Exception as e:
+            logger.exception("Gemini API call failed for collection %s", collection_name)
             return {
                 "question": question,
-                "answer": f"Error calling Gemini API: {str(e)}",
-                # Fixed: return structured sources, not raw text
+                "answer": "An error occurred while generating the answer. Please try again.",
                 "sources": [
                     {
                         "chunk_id": c["chunk_id"],

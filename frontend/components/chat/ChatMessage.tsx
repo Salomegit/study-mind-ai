@@ -49,7 +49,7 @@ export function ChatMessage({ message }: Props) {
               >
                 {src.metadata?.filename && (
                   <p className="text-xs font-semibold text-accent mb-1">
-                    📄 {src.metadata.filename}
+                    📄 {src.metadata.filename.split('/').pop() || src.metadata.filename}
                     {src.metadata.page_number && (
                       <span className="text-text-muted font-normal">
                         {' · '}Page {src.metadata.page_number}

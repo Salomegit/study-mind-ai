@@ -157,6 +157,7 @@ class DocumentProcessor:
         document_id: str,
         chunks: list[Document],
         embeddings: list[list[float]],
+        original_filename: Optional[str] = None,
     ) -> chromadb.Collection:
         """
         Persist chunks + embeddings in ChromaDB.
@@ -192,7 +193,7 @@ class DocumentProcessor:
 
                 record = {
                     "document_id":  document_id,
-                    "filename":     str(meta.get("source", "unknown")),
+                    "filename":     original_filename or str(meta.get("source", "unknown")),
                     "chunk_index":  idx,
                 }
 
@@ -237,21 +238,23 @@ class DocumentProcessor:
         file_path: str,
         collection_name: str,
         document_id: Optional[str] = None,
+        original_filename: Optional[str] = None,
     ) -> dict:
         """
         Full ingestion pipeline: load → chunk → embed → store.
 
         Args:
-            file_path:        Path to a .pdf or .docx file.
-            collection_name:  ChromaDB collection to store chunks in.
-            document_id:      Optional stable ID; auto-generated if omitted.
+            file_path:          Path to a .pdf or .docx file.
+            collection_name:    ChromaDB collection to store chunks in.
+            document_id:        Optional stable ID; auto-generated if omitted.
+            original_filename:  Optional original filename to store in metadata.
 
         Returns a summary dict.
         """
         from pathlib import Path
 
         document_id = document_id or str(uuid.uuid4())
-        file_name   = Path(file_path).name
+        file_name   = original_filename or Path(file_path).name
         file_type   = Path(file_path).suffix.lower().lstrip(".")
 
         logger.info(
@@ -279,6 +282,7 @@ class DocumentProcessor:
             document_id=document_id,
             chunks=chunks,
             embeddings=embeddings,
+            original_filename=file_name,
         )
 
         logger.info("Pipeline complete — document_id: %s", document_id)
