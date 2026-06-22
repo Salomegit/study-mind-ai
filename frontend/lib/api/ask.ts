@@ -1,5 +1,4 @@
 // lib/api/ask.ts
-
 import { API_BASE_URL } from './config'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -14,10 +13,17 @@ export interface Source {
   }
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface AskResponse {
   answer: string
   sources: Source[]
   num_chunks_retrieved: number
+  session_id: string | null        // ← new
+  history: ChatMessage[]           // ← new
 }
 
 export class AskApiError extends Error {
@@ -33,7 +39,7 @@ export class AskApiError extends Error {
 // ── Service ────────────────────────────────────────────────────────────────
 
 /**
- * Send a question to the RAG backend.
+ * Params for askQuestion.
  *
  * SECURITY NOTES:
  * - `collection` goes straight into the request body. Never derive it from
@@ -45,16 +51,26 @@ export class AskApiError extends Error {
  *   that allows prompt injection (wrap it clearly as user content).
  * - Rate-limit the /ask endpoint on the backend. A single question can
  *   trigger multiple Gemini API calls and ChromaDB reads.
+ * - `sessionId` is a client-generated UUID. History is stored server-side
+ *   only — the client never sends raw history, so it cannot be tampered with.
  */
-export async function askQuestion(
-  collection: string,
-  question: string,
-  signal?: AbortSignal,
-): Promise<AskResponse> {
+export interface AskParams {
+  collection: string
+  question: string
+  sessionId?: string
+  signal?: AbortSignal
+}
+
+export async function askQuestion({
+  collection,
+  question,
+  sessionId,
+  signal,
+}: AskParams): Promise<AskResponse> {
   const res = await fetch(`${API_BASE_URL}/ask`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ collection, question }),
+    body: JSON.stringify({ collection, question, session_id: sessionId }),  // ← new
     signal,
   })
 
