@@ -1,6 +1,4 @@
-// hooks/useAsk.ts
 'use client'
-
 import { useCallback, useRef, useState } from 'react'
 import { askQuestion, AskApiError, type AskResponse, type Source } from '@/lib/api/ask'
 
@@ -32,6 +30,7 @@ export function useAsk(collection: string) {
   })
 
   const abortRef = useRef<AbortController | null>(null)
+  const sessionIdRef = useRef<string>(crypto.randomUUID())   // ← new: one UUID per hook instance
 
   const ask = useCallback(
     async (question: string) => {
@@ -57,11 +56,12 @@ export function useAsk(collection: string) {
       }))
 
       try {
-        const data: AskResponse = await askQuestion(
+        const data: AskResponse = await askQuestion({        // ← changed: object call
           collection,
-          question.trim(),
-          abortRef.current.signal,
-        )
+          question: question.trim(),
+          sessionId: sessionIdRef.current,                   // ← new: pass session
+          signal: abortRef.current.signal,
+        })
 
         const assistantMessage: Message = {
           id: crypto.randomUUID(),
@@ -77,6 +77,7 @@ export function useAsk(collection: string) {
           status: 'idle',
           error: null,
         }))
+
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
           // User navigated away or cancelled — silently revert
@@ -105,6 +106,7 @@ export function useAsk(collection: string) {
 
   const clearChat = useCallback(() => {
     abortRef.current?.abort()
+    sessionIdRef.current = crypto.randomUUID()               // ← new: fresh session on clear
     setState({ messages: [], status: 'idle', error: null })
   }, [])
 
