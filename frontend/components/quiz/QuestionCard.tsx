@@ -32,14 +32,14 @@ export function QuestionCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className="bg-white dark:bg-slate-800 rounded-xl p-8 shadow-lg"
+      className="bg-white rounded-xl p-8 shadow-lg border border-border"
     >
       {/* Progress bar */}
       <div className="flex items-center justify-between mb-6">
         <span className="text-sm font-medium text-text-muted">
           Question {currentIndex + 1} of {totalQuestions}
         </span>
-        <div className="flex-1 ml-4 h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+        <div className="flex-1 ml-4 h-2 bg-border rounded-full overflow-hidden">
           <div
             className="h-full bg-primary transition-all duration-300"
             style={{ width: `${((currentIndex + 1) / totalQuestions) * 100}%` }}
@@ -62,7 +62,7 @@ export function QuestionCard({
                 className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
                   answer === option
                     ? 'border-primary bg-primary/10'
-                    : 'border-gray-200 dark:border-slate-700 hover:border-primary/50'
+                    : 'border-border hover:border-primary/50'
                 }`}
               >
                 <input
@@ -86,13 +86,11 @@ export function QuestionCard({
             {question.options.map((option, idx) => (
               <button
                 key={idx}
-                onClick={() =>
-                  onAnswerChange(question.question_id, option)
-                }
+                onClick={() => onAnswerChange(question.question_id, option)}
                 className={`p-4 border rounded-lg font-medium transition-all ${
                   answer === option
                     ? 'border-primary bg-primary text-white'
-                    : 'border-gray-200 dark:border-slate-700 text-text hover:border-primary/50'
+                    : 'border-border text-text hover:border-primary/50 hover:bg-primary/5'
                 }`}
               >
                 {option}
@@ -108,7 +106,7 @@ export function QuestionCard({
               onAnswerChange(question.question_id, e.target.value)
             }
             placeholder="Type your answer here..."
-            className="w-full p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 resize-none"
+            className="w-full p-4 border border-border rounded-lg bg-white text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 resize-none"
             rows={4}
           />
         )}
@@ -121,7 +119,7 @@ export function QuestionCard({
           disabled={currentIndex === 0}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
             currentIndex === 0
-              ? 'opacity-50 cursor-not-allowed'
+              ? 'opacity-50 cursor-not-allowed text-text-muted'
               : 'text-primary hover:bg-primary/10'
           }`}
         >
@@ -138,7 +136,7 @@ export function QuestionCard({
           disabled={currentIndex === totalQuestions - 1}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
             currentIndex === totalQuestions - 1
-              ? 'opacity-50 cursor-not-allowed'
+              ? 'opacity-50 cursor-not-allowed text-text-muted'
               : 'text-primary hover:bg-primary/10'
           }`}
         >
