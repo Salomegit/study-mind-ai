@@ -113,7 +113,7 @@ FACTUAL_PROMPT = _BASE_SYSTEM + """
 <INSTRUCTIONS>
 Answer the question directly and accurately using only the context above.
 If the student refers to a previous answer, use <HISTORY> to resolve the reference.
-Cite which chunk or source supports your answer where possible.
+Do not mention chunk numbers or chunk labels in the answer.
 Answer in 2-4 sentences. Use clear, precise language.
 </INSTRUCTIONS>
 

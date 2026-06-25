@@ -9,9 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from services.process_document import DocumentProcessor
 from services.rag_qa import RAGQABot
+from services.quiz import QuizGenerator
 from services import memory as session_memory
 
-from routers import ask, upload, collections, session
+from routers import ask, upload, collections, session, quiz
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -36,6 +37,7 @@ if not gemini_api_key:
 
 processor = DocumentProcessor()
 qa_bot = RAGQABot(api_key=gemini_api_key, chroma_path=settings.CHROMA_DB_PATH)
+quiz_generator = QuizGenerator(api_key=gemini_api_key, chroma_path=settings.CHROMA_DB_PATH)
 
 # -----------------------------------------------------------------------------
 # Lifespan — runs once on startup and shutdown
@@ -75,6 +77,7 @@ app.include_router(ask.router)
 app.include_router(upload.router)
 app.include_router(collections.router)
 app.include_router(session.router)
+app.include_router(quiz.router)
 
 
 # -----------------------------------------------------------------------------

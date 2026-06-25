@@ -65,8 +65,7 @@ class Retriever:
     def build_context(self, chunks: list[dict]) -> str:
         """Combine chunks into a labelled context string for the prompt."""
         parts = []
-        for i, chunk in enumerate(chunks):
-            score = chunk["similarity_score"]
+        for chunk in chunks:
             source = chunk["metadata"].get(
                 "filename", chunk["metadata"].get("source", "Unknown source")
             )
@@ -75,6 +74,6 @@ class Retriever:
             )
             page_info = f" | Page {page}" if page else ""
             parts.append(
-                f"[Chunk {i + 1} | Source: {source}{page_info} | Relevance: {score}]\n{chunk['text']}"
+                f"Source: {source}{page_info}\n{chunk['text']}"
             )
         return "\n\n".join(parts)

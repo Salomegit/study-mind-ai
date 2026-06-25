@@ -1,12 +1,13 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BookOpen, Upload, MessageCircle } from 'lucide-react'
+import { BookOpen, Upload, MessageCircle, Brain } from 'lucide-react'
 
 const navItems = [
   { href: '/', label: 'Home', icon: BookOpen },
   { href: '/upload', label: 'Upload', icon: Upload },
   { href: '/ask', label: 'Ask', icon: MessageCircle },
+  { href: '/quiz', label: 'Quiz', icon: Brain },
 ]
 
 export default function Navbar() {

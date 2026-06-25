@@ -15,6 +15,21 @@ def get_processor():
     return processor
 
 
+@router.get("/collections")
+def list_collections():
+    """List all available collections."""
+    try:
+        # Get qa_bot instead of processor to access collection_manager
+        from main import qa_bot
+        collections = qa_bot.collection_manager.list_names()
+        return {"collections": collections}
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch collections"
+        )
+
+
 @router.get("/collections/{collection_name}")
 def collection_info(collection_name: str):
     try:
