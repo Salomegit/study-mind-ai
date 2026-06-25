@@ -18,10 +18,10 @@ export function QuizResults({ results, onRetake }: QuizResultsProps) {
 
   const scoreBgColor =
     results.score_percentage >= 80
-      ? 'bg-green-50 dark:bg-green-900/20'
+      ? 'bg-green-50 border-green-200'
       : results.score_percentage >= 60
-        ? 'bg-yellow-50 dark:bg-yellow-900/20'
-        : 'bg-red-50 dark:bg-red-900/20'
+        ? 'bg-yellow-50 border-yellow-200'
+        : 'bg-red-50 border-red-200'
 
   return (
     <motion.div
@@ -31,9 +31,9 @@ export function QuizResults({ results, onRetake }: QuizResultsProps) {
       className="space-y-8"
     >
       {/* Score summary */}
-      <div className={`rounded-xl p-8 ${scoreBgColor}`}>
+      <div className={`rounded-xl p-8 border ${scoreBgColor}`}>
         <div className="text-center">
-          <h2 className="text-3xl font-bold mb-2">Quiz Complete!</h2>
+          <h2 className="text-3xl font-bold text-accent mb-2">Quiz Complete!</h2>
           <div className={`text-5xl font-extrabold ${scoreColor} mb-4`}>
             {results.score_percentage.toFixed(0)}%
           </div>
@@ -43,7 +43,7 @@ export function QuizResults({ results, onRetake }: QuizResultsProps) {
           </p>
           <button
             onClick={onRetake}
-            className="mt-6 bg-primary hover:bg-primary/90 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+            className="mt-6 bg-primary hover:bg-primary/90 text-white font-semibold py-2 px-6 rounded-lg transition-all hover:scale-105"
           >
             Take Another Quiz
           </button>
@@ -60,7 +60,7 @@ export function QuizResults({ results, onRetake }: QuizResultsProps) {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: idx * 0.1 }}
-            className="bg-white dark:bg-slate-800 rounded-lg p-6 shadow"
+            className="bg-white rounded-2xl p-6 shadow-sm border border-border"
           >
             {/* Question header */}
             <div className="flex items-start gap-3 mb-3">
@@ -80,11 +80,11 @@ export function QuizResults({ results, onRetake }: QuizResultsProps) {
             </div>
 
             {/* Answer info */}
-            <div className="ml-9 space-y-2 mb-4 bg-gray-50 dark:bg-slate-900 p-4 rounded">
+            <div className="ml-9 space-y-2 mb-4 bg-card/30 border border-border p-4 rounded-xl">
               <div>
                 <p className="text-sm font-medium text-text-muted">Your answer:</p>
                 <p className="text-text">
-                  {result.user_answer || <em>No answer provided</em>}
+                  {result.user_answer || <em className="text-text-muted">No answer provided</em>}
                 </p>
               </div>
 
@@ -98,16 +98,12 @@ export function QuizResults({ results, onRetake }: QuizResultsProps) {
 
             {/* Explanation */}
             {result.explanation && (
-              <div className="ml-9 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-4">
+              <div className="ml-9 bg-primary/8 border border-primary/20 rounded-xl p-4">
                 <div className="flex items-start gap-2">
-                  <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                      Explanation:
-                    </p>
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      {result.explanation}
-                    </p>
+                    <p className="text-sm font-medium text-accent mb-1">Explanation:</p>
+                    <p className="text-sm text-text-muted">{result.explanation}</p>
                   </div>
                 </div>
               </div>
