@@ -29,13 +29,7 @@ export function QuizSetup({
       alert('Please select a collection')
       return
     }
-
-    await onGenerateQuiz(
-      selectedCollection,
-      numQuestions,
-      difficulty,
-      quizType,
-    )
+    await onGenerateQuiz(selectedCollection, numQuestions, difficulty, quizType)
   }
 
   return (
@@ -43,10 +37,12 @@ export function QuizSetup({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="bg-white dark:bg-slate-800 rounded-xl p-8 shadow-lg max-w-2xl mx-auto"
+      className="bg-white rounded-3xl p-8 shadow-sm border border-border max-w-2xl mx-auto"
     >
       <div className="flex items-center gap-3 mb-6">
-        <Zap className="w-6 h-6 text-primary" />
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <Zap className="w-5 h-5 text-primary" />
+        </div>
         <h2 className="text-2xl font-bold text-accent">Generate a Quiz</h2>
       </div>
 
@@ -59,7 +55,7 @@ export function QuizSetup({
           <select
             value={selectedCollection}
             onChange={(e) => setSelectedCollection(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-text focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+            className="w-full px-4 py-2 border border-border rounded-lg bg-white text-text focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
           >
             <option value="">Choose a collection...</option>
             {collections.map((collection) => (
@@ -73,7 +69,7 @@ export function QuizSetup({
         {/* Number of questions */}
         <div>
           <label className="block text-sm font-medium text-text mb-2">
-            Number of Questions: {numQuestions}
+            Number of Questions: <span className="text-primary font-semibold">{numQuestions}</span>
           </label>
           <input
             type="range"
@@ -81,7 +77,7 @@ export function QuizSetup({
             max="20"
             value={numQuestions}
             onChange={(e) => setNumQuestions(parseInt(e.target.value))}
-            className="w-full h-2 bg-gray-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
           />
           <div className="flex justify-between text-xs text-text-muted mt-1">
             <span>1</span>
@@ -99,10 +95,10 @@ export function QuizSetup({
               <button
                 key={level}
                 onClick={() => setDifficulty(level)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all capitalize ${
+                className={`px-4 py-2 rounded-xl font-medium transition-all capitalize ${
                   difficulty === level
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 dark:bg-slate-900 text-text hover:bg-gray-200 dark:hover:bg-slate-700'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-card/30 border border-border text-text hover:border-primary/40 hover:bg-primary/5'
                 }`}
               >
                 {level}
@@ -124,7 +120,11 @@ export function QuizSetup({
             ] as const).map((option) => (
               <label
                 key={option.value}
-                className="flex items-center p-3 border border-gray-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-900/50 transition-all"
+                className={`flex items-center p-3 border rounded-xl cursor-pointer transition-all ${
+                  quizType === option.value
+                    ? 'border-primary bg-primary/8'
+                    : 'border-border hover:border-primary/40 hover:bg-primary/5'
+                }`}
               >
                 <input
                   type="radio"
@@ -144,10 +144,10 @@ export function QuizSetup({
         <button
           onClick={handleGenerate}
           disabled={isLoading || !selectedCollection}
-          className={`w-full py-3 px-4 rounded-lg font-semibold transition-all ${
+          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all ${
             isLoading || !selectedCollection
-              ? 'bg-gray-300 dark:bg-slate-700 text-text-muted cursor-not-allowed'
-              : 'bg-primary hover:bg-primary/90 text-white hover:scale-105'
+              ? 'bg-border text-text-muted cursor-not-allowed'
+              : 'bg-primary hover:bg-primary/90 text-white hover:scale-105 shadow-md'
           }`}
         >
           {isLoading ? 'Generating Quiz...' : 'Generate Quiz'}
