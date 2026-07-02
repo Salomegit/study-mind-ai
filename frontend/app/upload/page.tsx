@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { UploadCloud, CheckCircle, AlertCircle, FileText, X } from 'lucide-react'
 import { useUpload } from '@/hooks/useUpload'
+import { ProtectedPage } from '@/components/ProtectedRoute'
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -52,7 +53,8 @@ export default function UploadPage() {
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in">
+    <ProtectedPage>
+      <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in">
       {/* Header */}
       <div className="text-center mb-10">
         <h1 className="text-4xl font-extrabold text-accent">Upload Study Materials</h1>
@@ -192,6 +194,7 @@ export default function UploadPage() {
           <p className="text-sm text-text">{error}</p>
         </div>
       )}
-    </div>
+      </div>
+    </ProtectedPage>
   )
 }

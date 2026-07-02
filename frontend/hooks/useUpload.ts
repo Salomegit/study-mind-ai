@@ -2,6 +2,7 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import {
   uploadDocument,
   UploadApiError,
@@ -32,6 +33,7 @@ const INITIAL_STATE: UploadState = {
 export function useUpload() {
   const [state, setState] = useState<UploadState>(INITIAL_STATE)
   const abortRef = useRef<AbortController | null>(null)
+  const { getToken } = useAuth()
 
   const upload = useCallback(
     async (file: File, subjectName: string, documentId?: string) => {
@@ -42,11 +44,14 @@ export function useUpload() {
       setState({ status: 'uploading', progress: 0, result: null, error: null })
 
       try {
+        // Get Clerk auth token
+        const token = await getToken()
+        
         const result = await uploadDocument(file, subjectName, documentId, {
           signal: abortRef.current.signal,
           onProgress: ({ percent }) =>
             setState((prev) => ({ ...prev, progress: percent })),
-        })
+        }, token || undefined)
 
         setState({ status: 'success', progress: 100, result, error: null })
         return result
@@ -66,7 +71,7 @@ export function useUpload() {
         return null
       }
     },
-    [],
+    [getToken],
   )
 
   const cancel = useCallback(() => {

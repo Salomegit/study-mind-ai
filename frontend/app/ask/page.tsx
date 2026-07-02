@@ -6,6 +6,7 @@ import { useAsk } from '@/hooks/useAsk'
 import { ChatMessage } from '@/components/chat/ChatMessage'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { TypingIndicator } from '@/components/chat/TypingIndicator'
+import { ProtectedPage } from '@/components/ProtectedRoute'
 
 // ── Empty state ────────────────────────────────────────────────────────────
 
@@ -67,7 +68,8 @@ export default function AskPage() {
 
   if (!committed) {
     return (
-      <div className="max-w-md mx-auto px-4 py-24 animate-fade-in">
+      <ProtectedPage>
+        <div className="max-w-md mx-auto px-4 py-24 animate-fade-in">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold text-accent">Ask Anything</h1>
           <p className="text-text-muted mt-2">
@@ -103,13 +105,15 @@ export default function AskPage() {
           </button>
         </form>
       </div>
+      </ProtectedPage>
     )
   }
 
   // ── Chat interface ──────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col h-[calc(100vh-80px)] animate-fade-in">
+    <ProtectedPage>
+      <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col h-[calc(100vh-80px)] animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
@@ -165,6 +169,7 @@ export default function AskPage() {
           Enter to send · Shift+Enter for new line
         </p>
       </div>
-    </div>
+      </div>
+    </ProtectedPage>
   )
 }

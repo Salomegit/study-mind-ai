@@ -8,6 +8,7 @@ import { useQuiz } from '@/hooks/useQuiz'
 import { QuizSetup } from '@/components/quiz/QuizSetup'
 import { QuestionCard } from '@/components/quiz/QuestionCard'
 import { QuizResults } from '@/components/quiz/QuizResults'
+import { ProtectedPage } from '@/components/ProtectedRoute'
 import { API_BASE_URL } from '@/lib/api/config'
 
 export default function QuizPage() {
@@ -44,7 +45,8 @@ export default function QuizPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-background/90">
+    <ProtectedPage>
+      <div className="min-h-screen bg-gradient-to-br from-background to-background/90">
       {/* Header */}
       <header className="border-b border-border bg-white/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -150,7 +152,7 @@ export default function QuizPage() {
                     <QuizSetup
                       collections={collections}
                       onGenerateQuiz={handleGenerateQuiz}
-                      isLoading={quiz.status === 'generating'}
+                      isLoading={false}
                     />
                   )}
                 </>
@@ -235,6 +237,7 @@ export default function QuizPage() {
           )}
         </AnimatePresence>
       </main>
-    </div>
+      </div>
+    </ProtectedPage>
   )
 }

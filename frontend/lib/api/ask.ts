@@ -58,6 +58,7 @@ export interface AskParams {
   collection: string
   question: string
   sessionId?: string
+  authToken?: string
   signal?: AbortSignal
 }
 
@@ -65,12 +66,18 @@ export async function askQuestion({
   collection,
   question,
   sessionId,
+  authToken,
   signal,
 }: AskParams): Promise<AskResponse> {
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`
+  }
+
   const res = await fetch(`${API_BASE_URL}/ask`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ collection, question, session_id: sessionId }),  // ← new
+    headers,
+    body: JSON.stringify({ collection, question, session_id: sessionId }),
     signal,
   })
 

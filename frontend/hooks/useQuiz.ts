@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import {
   generateQuiz,
   checkAnswers,
@@ -37,6 +38,8 @@ export function useQuiz(initialCollection: string = '') {
     userAnswers: {},
   })
 
+  const { getToken } = useAuth()
+
   // Generate a new quiz
   const generateNewQuiz = useCallback(
     async (
@@ -61,6 +64,9 @@ export function useQuiz(initialCollection: string = '') {
       }))
 
       try {
+        // Get Clerk auth token
+        const token = await getToken()
+
         const request: QuizGenerationRequest = {
           collection: collection.trim(),
           num_questions: numQuestions,
@@ -68,13 +74,13 @@ export function useQuiz(initialCollection: string = '') {
           quiz_type: quizType,
         }
 
-        const response = await generateQuiz(request)
+        const response = await generateQuiz(request, token || undefined)
 
         if (response.error) {
           setState((prev) => ({
             ...prev,
             status: 'error',
-            error: response.error,
+            error: response.error || 'Unknown error occurred',
           }))
           return
         }
@@ -100,7 +106,7 @@ export function useQuiz(initialCollection: string = '') {
         }))
       }
     },
-    [],
+    [getToken],
   )
 
   // Move to next question
@@ -168,6 +174,9 @@ export function useQuiz(initialCollection: string = '') {
     }))
 
     try {
+      // Get Clerk auth token
+      const token = await getToken()
+
       // Convert answers to submission format
       const answers: AnswerSubmission[] = state.quiz.questions.map((q) => ({
         question_id: q.question_id,
@@ -179,13 +188,13 @@ export function useQuiz(initialCollection: string = '') {
         answers,
       }
 
-      const response = await checkAnswers(request)
+      const response = await checkAnswers(request, token || undefined)
 
       if (response.error) {
         setState((prev) => ({
           ...prev,
           status: 'error',
-          error: response.error,
+          error: response.error || 'Unknown error occurred',
         }))
         return
       }
@@ -208,7 +217,7 @@ export function useQuiz(initialCollection: string = '') {
         error: message,
       }))
     }
-  }, [state.quiz, state.userAnswers])
+  }, [state.quiz, state.userAnswers, getToken])
 
   // Reset quiz
   const resetQuiz = useCallback(() => {

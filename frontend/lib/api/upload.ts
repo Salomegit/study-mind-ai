@@ -74,14 +74,14 @@ function validateFile(file: File): void {
  *   before using them as ChromaDB collection names.
  * - file.type can be spoofed by the client — the backend MUST re-validate
  *   the actual file magic bytes / content-type.
- * - If you add auth later, attach the token in the Authorization header
- *   below, never in the URL.
+ * - Auth token is attached in the Authorization header for Clerk authentication.
  */
 export function uploadDocument(
   file: File,
   subjectName: string,
   documentId?: string,
   options: UploadOptions = {},
+  authToken?: string,
 ): Promise<UploadResponse> {
   // Fast client-side validation before hitting the network
   validateFile(file)
@@ -145,8 +145,12 @@ export function uploadDocument(
 
     xhr.timeout = 120_000 // 2 min for large files
     xhr.open('POST', `${API_BASE_URL}/upload`)
-    // Add auth header here when ready:
-    // xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    
+    // Add Clerk auth header
+    if (authToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${authToken}`)
+    }
+    
     xhr.send(formData)
   })
 }

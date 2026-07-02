@@ -79,13 +79,18 @@ export class QuizApiError extends Error {
  */
 export async function generateQuiz(
   request: QuizGenerationRequest,
+  authToken?: string,
 ): Promise<QuizGenerationResponse> {
   const url = new URL('/quiz/generate', API_BASE_URL).toString()
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`
+  }
 
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(request),
     })
 
@@ -112,13 +117,18 @@ export async function generateQuiz(
  */
 export async function checkAnswers(
   request: QuizAnswerRequest,
+  authToken?: string,
 ): Promise<QuizResultResponse> {
   const url = new URL('/quiz/check-answers', API_BASE_URL).toString()
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`
+  }
 
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(request),
     })
 
