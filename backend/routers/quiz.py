@@ -2,12 +2,12 @@
 Quiz router — Handle quiz generation and answer checking endpoints.
 
 Endpoints:
-- POST /quiz/generate — Generate a quiz from a collection
-- POST /quiz/check-answers — Check answers and return results
+- POST /quiz/generate — Generate a quiz from a collection (requires auth)
+- POST /quiz/check-answers — Check answers and return results (requires auth)
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 
 from schemas import (
@@ -17,6 +17,7 @@ from schemas import (
     QuizResultResponse,
 )
 from services.input_guard import validate_collection_name, InputValidationError
+from services.auth import verify_clerk_auth
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,11 @@ def get_quiz_generator():
 
 
 @router.post("/quiz/generate", response_model=QuizGenerationResponse)
-def generate_quiz(request: QuizGenerationRequest):
+def generate_quiz(request: QuizGenerationRequest, user_id: str = Depends(verify_clerk_auth)):
     """
     Generate a quiz from a document collection.
+    
+    Requires Clerk authentication.
 
     Parameters:
     - collection: Name of the collection to generate quiz from
@@ -53,7 +56,8 @@ def generate_quiz(request: QuizGenerationRequest):
         raise HTTPException(status_code=422, detail=str(e))
 
     logger.info(
-        "Quiz generation requested — collection: %s | num_questions: %d | difficulty: %s",
+        "Quiz generation requested — user: %s | collection: %s | num_questions: %d | difficulty: %s",
+        user_id,
         clean_collection,
         request.num_questions,
         request.difficulty,
@@ -110,9 +114,11 @@ def generate_quiz(request: QuizGenerationRequest):
 
 
 @router.post("/quiz/check-answers", response_model=QuizResultResponse)
-def check_answers(request: QuizAnswerRequest):
+def check_answers(request: QuizAnswerRequest, user_id: str = Depends(verify_clerk_auth)):
     """
     Check user answers against the correct answers.
+    
+    Requires Clerk authentication.
 
     Parameters:
     - quiz_id: The ID returned from /quiz/generate
@@ -125,7 +131,8 @@ def check_answers(request: QuizAnswerRequest):
     - total_questions: Total number of questions
     """
     logger.info(
-        "Answer checking requested — quiz_id: %s | answers_submitted: %d",
+        "Answer checking requested — user: %s | quiz_id: %s | answers_submitted: %d",
+        user_id,
         request.quiz_id,
         len(request.answers),
     )

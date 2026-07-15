@@ -1,12 +1,13 @@
 # backend/routers/ask.py
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 
 from schemas import QuestionRequest, QuestionResponse
 from services.auth import get_optional_user_id
 from services.input_guard import validate_question, validate_collection_name, InputValidationError
+from services.auth import verify_clerk_auth
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,14 @@ def get_qa_bot():
 
 
 @router.post("/ask", response_model=QuestionResponse)
-def ask_question(request: QuestionRequest, user_id: str | None = Depends(get_optional_user_id)):
+def ask_question(request: QuestionRequest, user_id: str = Depends(verify_clerk_auth)):
     """
     Ask a question about an uploaded document.
+    
+    Requires Clerk authentication.
 
     Security layers:
+    - Layer 1: Clerk authentication (verify_clerk_auth) — user must be signed in
     - Layer 2a: Pydantic (QuestionRequest) validates non-empty fields
     - Layer 2b: input_guard.validate_question() checks length + injection patterns
     - Layer 3: prompts.py uses XML delimiters to isolate user input
@@ -46,7 +50,8 @@ def ask_question(request: QuestionRequest, user_id: str | None = Depends(get_opt
         raise HTTPException(status_code=422, detail=str(e))
 
     logger.info(
-        "Question received — collection: %s | question: %s | session: %s",
+        "Question received — user: %s | collection: %s | question: %s | session: %s",
+        user_id,
         clean_collection,
         clean_question[:60] + "..." if len(clean_question) > 60 else clean_question,
         request.session_id or "none",

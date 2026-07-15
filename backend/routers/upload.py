@@ -4,11 +4,12 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends
 from fastapi.responses import JSONResponse
 
 from config import settings
 from services.input_guard import validate_collection_name, InputValidationError
+from services.auth import verify_clerk_auth
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,20 @@ async def upload_document(
     file: UploadFile = File(...),
     collection_name: str = Form(...),
     document_id: str = Form(None),
+    user_id: str = Depends(verify_clerk_auth),
 ):
     if file.content_type not in SUPPORTED_TYPES:
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported file type '{file.content_type}'. Accepted: PDF, DOCX",
         )
+
+    logger.info(
+        "Upload started — user: %s | collection: %s | file: %s",
+        user_id,
+        collection_name,
+        file.filename,
+    )
 
     try:
         validate_collection_name(collection_name)
