@@ -17,26 +17,21 @@ export default function Navbar() {
   const pathname = usePathname()
   const { isSignedIn, isLoaded } = useUser()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const menuRef = useRef(null)
+  const menuRef = useRef<HTMLElement>(null)
 
   const toggleMenu = () => setIsMenuOpen((open) => !open)
   const closeMenu = () => setIsMenuOpen(false)
-
-  // Close the mobile menu whenever the route changes.
-  useEffect(() => {
-    closeMenu()
-  }, [pathname])
 
   // Close on outside click / Escape, and lock body scroll while open.
   useEffect(() => {
     if (!isMenuOpen) return
 
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && e.target instanceof Node && !menuRef.current.contains(e.target)) {
         closeMenu()
       }
     }
-    const handleEscape = (e) => {
+    const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeMenu()
     }
 

@@ -1,0 +1,17 @@
+{$DOMAIN} {
+    encode zstd gzip
+
+    # The API enforces the exact 7 MiB file limit. This stops larger request
+    # bodies before they reach the application container.
+    request_body {
+        max_size 8MB
+    }
+
+    handle_path /api/* {
+        reverse_proxy backend:8000
+    }
+
+    handle {
+        reverse_proxy frontend:3000
+    }
+}

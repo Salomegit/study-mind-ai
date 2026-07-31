@@ -1,9 +1,10 @@
 # backend/routers/collections.py
 
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from services.utils import sanitise_collection_name
+from services.auth import require_user_id
+from services.utils import user_collection_name, user_collection_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,16 @@ def get_processor():
 
 
 @router.get("/collections")
-def list_collections():
-    """List all available collections."""
+def list_collections(user_id: str = Depends(require_user_id)):
+    """List only the authenticated user's collections."""
     try:
-        # Get qa_bot instead of processor to access collection_manager
         from main import qa_bot
-        collections = qa_bot.collection_manager.list_names()
+        prefix = user_collection_prefix(user_id)
+        collections = sorted(
+            name.removeprefix(prefix)
+            for name in qa_bot.collection_manager.list_names()
+            if name.startswith(prefix)
+        )
         return {"collections": collections}
     except Exception:
         raise HTTPException(
@@ -31,11 +36,11 @@ def list_collections():
 
 
 @router.get("/collections/{collection_name}")
-def collection_info(collection_name: str):
+def collection_info(collection_name: str, user_id: str = Depends(require_user_id)):
     try:
-        safe_name = sanitise_collection_name(collection_name)
-        collection = get_processor().client.get_collection(name=safe_name)
-        return {"collection_name": safe_name, "chunks": collection.count()}
+        physical_name = user_collection_name(user_id, collection_name)
+        collection = get_processor().client.get_collection(name=physical_name)
+        return {"collection_name": collection_name, "chunks": collection.count()}
     except Exception:
         raise HTTPException(
             status_code=404,
@@ -43,14 +48,3 @@ def collection_info(collection_name: str):
         )
 
 
-@router.delete("/collections/{collection_name}")
-def delete_collection(collection_name: str):
-    try:
-        safe_name = sanitise_collection_name(collection_name)
-        get_processor().client.delete_collection(name=safe_name)
-        return {"deleted": safe_name}
-    except Exception:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Collection '{collection_name}' not found",
-        )

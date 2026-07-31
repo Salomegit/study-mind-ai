@@ -32,14 +32,6 @@ class CollectionManager:
             embedding_function=self.embedding_function,
         )
 
-    def delete(self, collection_name: str) -> dict:
-        try:
-            safe_name = sanitise_collection_name(collection_name)
-            self.client.delete_collection(safe_name)
-            return {"success": True, "message": f"Collection '{safe_name}' deleted."}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
     def list_names(self) -> list[str]:
         return [col.name for col in self.client.list_collections()]
 

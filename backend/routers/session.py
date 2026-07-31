@@ -19,8 +19,8 @@ def list_recent_sessions(limit: int = 20, user_id: str = Depends(require_user_id
     collection name and a short preview instead of a bare session_id.
 
     Requires auth — this lists chat content, so it's scoped to the Clerk
-    user_id embedded in the caller's token. Sessions with no owner stamped
-    (created before this was added) are visible to anyone, same as before.
+    user_id embedded in the caller's token. Ownerless legacy sessions are
+    excluded because their owner cannot be verified.
     """
     return {"sessions": session_memory.list_sessions(limit=limit, user_id=user_id)}
 
@@ -30,8 +30,8 @@ def clear_session(session_id: str, user_id: str = Depends(require_user_id)):
     """
     Clear all chat history for a session.
     Call this when the student clicks 'New Chat' on the frontend.
-    A session owned by a different user is silently a no-op (idempotent
-    delete — doesn't leak whether the session_id exists).
+    A session owned by a different user is silently a no-op, so the endpoint
+    does not reveal whether the session_id exists.
     """
     try:
         session_memory.clear_session(session_id, user_id=user_id)
@@ -43,6 +43,8 @@ def clear_session(session_id: str, user_id: str = Depends(require_user_id)):
 @router.get("/session/{session_id}/history")
 def get_session_history(session_id: str, user_id: str = Depends(require_user_id)):
     """Return the full history for a session — useful for debug or UI restore."""
+    if not session_memory.session_is_accessible(session_id, user_id):
+        raise HTTPException(status_code=404, detail="Session not found.")
     history = session_memory.get_history(session_id, user_id=user_id)
     return {"session_id": session_id, "history": history, "turns": len(history)}
 

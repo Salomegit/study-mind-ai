@@ -18,8 +18,11 @@ from schemas import (
 )
 from services.input_guard import validate_collection_name, InputValidationError
 from services.auth import verify_clerk_auth
+from services.utils import user_collection_name
+from services import memory as usage_store
 
 logger = logging.getLogger(__name__)
+DAILY_QUIZ_LIMIT = 10
 
 router = APIRouter()
 
@@ -42,7 +45,7 @@ def generate_quiz(request: QuizGenerationRequest, user_id: str = Depends(verify_
 
     Parameters:
     - collection: Name of the collection to generate quiz from
-    - num_questions: Number of questions (1-20, default 5)
+    - num_questions: Number of questions (1-10, default 5)
     - difficulty: "easy", "medium", "hard" (default "medium")
     - quiz_type: "mixed", "multiple_choice_only", "true_false_only" (default "mixed")
 
@@ -51,7 +54,8 @@ def generate_quiz(request: QuizGenerationRequest, user_id: str = Depends(verify_
     - questions: List of generated quiz questions
     """
     try:
-        clean_collection = validate_collection_name(request.collection)
+        logical_collection = validate_collection_name(request.collection)
+        clean_collection = user_collection_name(user_id, logical_collection)
     except InputValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -63,12 +67,19 @@ def generate_quiz(request: QuizGenerationRequest, user_id: str = Depends(verify_
         request.difficulty,
     )
 
+    if not usage_store.consume_daily_quota(user_id, "quiz", DAILY_QUIZ_LIMIT):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily quiz limit reached ({DAILY_QUIZ_LIMIT} generations). Try again tomorrow.",
+        )
+
     try:
         result = get_quiz_generator().generate_quiz(
             collection_name=clean_collection,
             num_questions=request.num_questions,
             difficulty=request.difficulty,
             quiz_type=request.quiz_type,
+            user_id=user_id,
         )
 
         if result.get("error"):
@@ -77,7 +88,7 @@ def generate_quiz(request: QuizGenerationRequest, user_id: str = Depends(verify_
                 status_code=400,
                 content={
                     "quiz_id": None,
-                    "collection": clean_collection,
+                    "collection": logical_collection,
                     "questions": [],
                     "num_questions": request.num_questions,
                     "difficulty": request.difficulty,
@@ -96,7 +107,7 @@ def generate_quiz(request: QuizGenerationRequest, user_id: str = Depends(verify_
             status_code=200,
             content={
                 "quiz_id": result.get("quiz_id"),
-                "collection": clean_collection,
+                "collection": logical_collection,
                 "questions": result.get("questions", []),
                 "num_questions": request.num_questions,
                 "difficulty": request.difficulty,
@@ -147,6 +158,7 @@ def check_answers(request: QuizAnswerRequest, user_id: str = Depends(verify_cler
         result = get_quiz_generator().check_answers(
             quiz_id=request.quiz_id,
             answers=answers_list,
+            user_id=user_id,
         )
 
         if result.get("error"):

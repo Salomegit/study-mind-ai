@@ -25,9 +25,11 @@ logger = logging.getLogger(__name__)
 class QuizGenerator:
     """Generate quiz questions from document collections using Gemini."""
 
-    def __init__(self, api_key: str, chroma_path: str = "./chroma_db"):
+    def __init__(self, api_key: str, chroma_path: str | None = None):
         genai.configure(api_key=api_key)
         self.gemini_model = genai.GenerativeModel("gemini-2.5-flash")
+
+        chroma_path = chroma_path or settings.CHROMA_DB_PATH
 
         embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=settings.EMBEDDING_MODEL
@@ -46,6 +48,7 @@ class QuizGenerator:
         num_questions: int = 5,
         difficulty: str = "medium",
         quiz_type: str = "mixed",
+        user_id: str | None = None,
     ) -> dict:
         """
         Generate a quiz from a collection.
@@ -101,6 +104,7 @@ class QuizGenerator:
             self.quiz_cache[quiz_id] = {
                 "questions": questions,
                 "collection": collection_name,
+                "user_id": user_id,
                 "difficulty": difficulty,
                 "quiz_type": quiz_type,
             }
@@ -122,7 +126,12 @@ class QuizGenerator:
     # Answer checking
     # ------------------------------------------------------------------
 
-    def check_answers(self, quiz_id: str, answers: list[dict]) -> dict:
+    def check_answers(
+        self,
+        quiz_id: str,
+        answers: list[dict],
+        user_id: str | None = None,
+    ) -> dict:
         """
         Check user answers against the correct answers.
 
@@ -148,6 +157,13 @@ class QuizGenerator:
                 }
 
             cached_quiz = self.quiz_cache[quiz_id]
+            if cached_quiz.get("user_id") != user_id:
+                return {
+                    "error": "Quiz not found. Quiz data may have expired.",
+                    "results": [],
+                    "correct_count": 0,
+                    "score_percentage": 0,
+                }
             questions = cached_quiz["questions"]
 
             # Create a map of question_id to question

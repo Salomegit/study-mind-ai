@@ -100,7 +100,7 @@ export default function UploadPage() {
             <>
               <UploadCloud className="w-12 h-12 text-primary mx-auto mb-3" />
               <p className="text-text font-medium">Click or drag a file here</p>
-              <p className="text-text-muted text-sm mt-1">PDF or DOCX · max 20 MB</p>
+              <p className="text-text-muted text-sm mt-1">PDF or DOCX · max 7 MB</p>
             </>
           )}
         </div>

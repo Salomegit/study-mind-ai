@@ -27,9 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 class RAGQABot:
-    def __init__(self, api_key: str, chroma_path: str = "./chroma_db"):
+    def __init__(self, api_key: str, chroma_path: str | None = None):
         genai.configure(api_key=api_key)
         self.gemini_model = genai.GenerativeModel("gemini-2.5-flash")
+
+        chroma_path = chroma_path or settings.CHROMA_DB_PATH
 
         embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=settings.EMBEDDING_MODEL
@@ -48,6 +50,7 @@ class RAGQABot:
         session_id: str | None = None,
         top_k: int = 8,
         user_id: str | None = None,
+        collection_label: str | None = None,
     ) -> dict:
         """
         Full RAG pipeline:
@@ -61,6 +64,9 @@ class RAGQABot:
         8. Save both turns to session memory
         9. Return structured response (matches QuestionResponse schema)
         """
+        if session_id and user_id and not session_memory.session_is_accessible(session_id, user_id):
+            raise PermissionError("Session does not belong to this user")
+
         # Step 1 — Load history
         history = session_memory.get_history(session_id, user_id=user_id) if session_id else []
 
@@ -114,8 +120,9 @@ class RAGQABot:
 
             # Step 8 — Persist both turns to session memory
             if session_id:
-                session_memory.save_turn(session_id, "user", question, collection=collection_name, user_id=user_id)
-                session_memory.save_turn(session_id, "assistant", answer, collection=collection_name, user_id=user_id)
+                session_collection = collection_label or collection_name
+                session_memory.save_turn(session_id, "user", question, collection=session_collection, user_id=user_id)
+                session_memory.save_turn(session_id, "assistant", answer, collection=session_collection, user_id=user_id)
 
             # Reload history so response reflects the just-saved turns
             updated_history = session_memory.get_history(session_id, user_id=user_id) if session_id else []

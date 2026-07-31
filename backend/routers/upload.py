@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from config import settings
 from services.input_guard import validate_collection_name, InputValidationError
 from services.auth import verify_clerk_auth
+from services.utils import user_collection_name
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,8 @@ async def upload_document(
     )
 
     try:
-        validate_collection_name(collection_name)
+        logical_collection = validate_collection_name(collection_name)
+        physical_collection = user_collection_name(user_id, logical_collection)
     except InputValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -75,10 +77,11 @@ async def upload_document(
     try:
         result = get_processor().process(
             file_path=str(save_path),
-            collection_name=collection_name,
+            collection_name=physical_collection,
             document_id=document_id,
             original_filename=file.filename,
         )
+        result["collection_name"] = logical_collection
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:

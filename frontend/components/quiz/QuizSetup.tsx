@@ -74,14 +74,14 @@ export function QuizSetup({
           <input
             type="range"
             min="1"
-            max="20"
+            max="10"
             value={numQuestions}
             onChange={(e) => setNumQuestions(parseInt(e.target.value))}
             className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
           />
           <div className="flex justify-between text-xs text-text-muted mt-1">
             <span>1</span>
-            <span>20</span>
+            <span>10</span>
           </div>
         </div>
 

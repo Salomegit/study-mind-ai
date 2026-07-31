@@ -20,16 +20,18 @@ Security:
 import json
 import logging
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 # Sessions inactive longer than this are pruned on next startup
 SESSION_TTL_HOURS = 24
 
-# SQLite file lives next to chroma_db — one data directory
-DB_PATH = Path("./session_memory.db")
+# SQLite file lives under the shared DATA_DIR-backed storage volume
+DB_PATH = Path(settings.SQLITE_DB_PATH)
 
 
 def _connect() -> sqlite3.Connection:
@@ -53,6 +55,15 @@ def init_db() -> None:
                 updated_at  TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS daily_usage (
+                user_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                usage_date TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (user_id, action, usage_date)
+            )
+        """)
         # Older DBs created before these columns existed.
         existing_columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
         if "collection" not in existing_columns:
@@ -61,6 +72,7 @@ def init_db() -> None:
             conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT")
         conn.commit()
     _prune_expired()
+    _prune_usage()
     logger.info("Session memory DB ready at %s", DB_PATH)
 
 
@@ -70,6 +82,33 @@ def _prune_expired() -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM sessions WHERE updated_at < ?", (cutoff,))
         conn.commit()
+
+
+def _prune_usage() -> None:
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=30)).isoformat()
+    with _connect() as conn:
+        conn.execute("DELETE FROM daily_usage WHERE usage_date < ?", (cutoff,))
+        conn.commit()
+
+
+def consume_daily_quota(user_id: str, action: str, limit: int) -> bool:
+    """Consume one daily request only when the user's quota has room."""
+    usage_date = datetime.now(timezone.utc).date().isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT count FROM daily_usage WHERE user_id = ? AND action = ? AND usage_date = ?",
+            (user_id, action, usage_date),
+        ).fetchone()
+        if row and row["count"] >= limit:
+            return False
+        conn.execute("""
+            INSERT INTO daily_usage (user_id, action, usage_date, count)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(user_id, action, usage_date)
+            DO UPDATE SET count = daily_usage.count + 1
+        """, (user_id, action, usage_date))
+        return True
 
 
 # ── Public interface ───────────────────────────────────────────────────────
@@ -93,10 +132,12 @@ def save_turn(
     now = datetime.utcnow().isoformat()
     with _connect() as conn:
         row = conn.execute(
-            "SELECT history FROM sessions WHERE session_id = ?", (session_id,)
+            "SELECT history, user_id FROM sessions WHERE session_id = ?", (session_id,)
         ).fetchone()
 
         if row:
+            if not user_id or row["user_id"] != user_id:
+                raise PermissionError("Session does not belong to this user")
             history = json.loads(row["history"])
         else:
             history = []
@@ -118,10 +159,8 @@ def save_turn(
 def get_history(session_id: str, user_id: str | None = None) -> list[dict]:
     """
     Return the full message list for a session.
-    Returns an empty list if the session does not exist, or if it belongs
-    to a different user_id than the one given (sessions with no owner
-    stamped — e.g. pre-auth data — remain readable by anyone, matching the
-    original no-auth trust model).
+    Returns an empty list if the session does not exist or is not owned by
+    the authenticated user. Ownerless legacy sessions are not exposed.
     """
     with _connect() as conn:
         row = conn.execute(
@@ -129,20 +168,29 @@ def get_history(session_id: str, user_id: str | None = None) -> list[dict]:
         ).fetchone()
     if not row:
         return []
-    if row["owner"] is not None and row["owner"] != user_id:
+    if not user_id or row["owner"] != user_id:
         return []
     return json.loads(row["history"])
+
+
+def session_is_accessible(session_id: str, user_id: str) -> bool:
+    """Allow a new session ID or one already owned by this user."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+    return row is None or row["user_id"] == user_id
 
 
 def clear_session(session_id: str, user_id: str | None = None) -> None:
     """
     Delete all history for a session (e.g. user starts a new chat).
-    Scoped the same way as get_history: a session with an owner stamped can
-    only be cleared by that owner.
+    Only the authenticated owner can clear a session. Ownerless legacy
+    sessions are not accessible through this endpoint.
     """
     with _connect() as conn:
         conn.execute(
-            "DELETE FROM sessions WHERE session_id = ? AND (user_id IS NULL OR user_id = ?)",
+            "DELETE FROM sessions WHERE session_id = ? AND user_id = ?",
             (session_id, user_id),
         )
         conn.commit()
@@ -151,8 +199,7 @@ def clear_session(session_id: str, user_id: str | None = None) -> None:
 def list_sessions(limit: int = 20, user_id: str | None = None) -> list[dict]:
     """
     Return recent non-empty sessions belonging to `user_id`, most recently
-    active first. Sessions with no owner stamped (pre-auth data) are
-    included for everyone, same trust model as get_history/clear_session.
+    active first. Ownerless legacy sessions are excluded.
     Each entry has a `preview` (first user turn, truncated) so the frontend
     can render a human-readable "recent chats" list instead of raw UUIDs.
     """
@@ -160,7 +207,7 @@ def list_sessions(limit: int = 20, user_id: str | None = None) -> list[dict]:
         rows = conn.execute("""
             SELECT session_id, collection, history, updated_at
             FROM sessions
-            WHERE history != '[]' AND (user_id IS NULL OR user_id = ?)
+            WHERE history != '[]' AND user_id = ?
             ORDER BY updated_at DESC
             LIMIT ?
         """, (user_id, limit)).fetchall()

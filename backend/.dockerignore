@@ -1,0 +1,8 @@
+.env
+__pycache__/
+myvenv/
+data/
+chroma_db/
+uploads/
+*.db
+*.sqlite3

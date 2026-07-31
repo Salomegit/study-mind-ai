@@ -102,15 +102,15 @@ class QuizQuestion(BaseModel):
 class QuizGenerationRequest(BaseModel):
     """Request to generate a quiz from a document collection."""
     collection: str
-    num_questions: int = 5  # How many questions to generate
+    num_questions: int = 5  # How many questions to generate, maximum 10
     difficulty: str = "medium"  # "easy", "medium", "hard"
     quiz_type: str = "mixed"  # "mixed", "multiple_choice_only", "true_false_only"
 
     @field_validator("num_questions")
     @classmethod
     def validate_num_questions(cls, v: int) -> int:
-        if not 1 <= v <= 20:
-            raise ValueError("Number of questions must be between 1 and 20.")
+        if not 1 <= v <= 10:
+            raise ValueError("Number of questions must be between 1 and 10.")
         return v
 
     @field_validator("difficulty")

@@ -134,7 +134,7 @@ export default function AskPage() {
 
   return (
     <ProtectedPage>
-      <div className="max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6 h-[calc(100vh-80px)] animate-fade-in">
+      <div className="max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6 h-full min-h-0 animate-fade-in">
         <aside className="hidden md:block overflow-y-auto">
           <RecentChats
             activeSessionId={sessionId}
@@ -143,7 +143,7 @@ export default function AskPage() {
           />
         </aside>
 
-        <div className="flex flex-col h-full min-w-0">
+        <div className="flex flex-col h-full min-h-0 min-w-0">
           {/* Header */}
           <div className="flex items-center justify-between mb-4 shrink-0">
             <div>
@@ -172,7 +172,7 @@ export default function AskPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto space-y-6 pr-1 pb-2">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1 pb-2">
             {messages.length === 0 ? (
               <EmptyState onSuggestion={(s) => ask(s)} />
             ) : (

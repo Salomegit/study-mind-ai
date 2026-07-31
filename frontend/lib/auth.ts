@@ -18,8 +18,9 @@ export async function getUserRole(): Promise<UserRole | null> {
   if (!userId) return null
   
   // Access role from public metadata
-  const role = sessionClaims?.metadata?.role as UserRole | undefined
-  return role || 'user' // Default to 'user' if not set
+  const metadata = sessionClaims?.metadata as { role?: unknown } | undefined
+  const role = metadata?.role
+  return role === 'admin' || role === 'user' ? role : 'user'
 }
 
 /**

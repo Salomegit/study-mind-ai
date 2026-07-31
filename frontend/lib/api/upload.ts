@@ -27,7 +27,7 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
-const MAX_SIZE_MB = 20  // mirror your backend settings.MAX_FILE_SIZE_MB
+const MAX_SIZE_MB = 7  // mirror your backend settings.MAX_FILE_SIZE_MB
 
 export class UploadValidationError extends Error {
   constructor(message: string) {

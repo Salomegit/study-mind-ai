@@ -1,0 +1,6 @@
+.env*
+.clerk/
+.next/
+node_modules/
+coverage/
+*.log

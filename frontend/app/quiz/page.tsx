@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, AlertCircle, Loader } from 'lucide-react'
 import Link from 'next/link'
@@ -15,12 +16,16 @@ export default function QuizPage() {
   const [collections, setCollections] = useState<string[]>([])
   const [collectionsLoaded, setCollectionsLoaded] = useState(false)
   const quiz = useQuiz()
+  const { getToken } = useAuth()
 
   useEffect(() => {
     const loadCollections = async () => {
       try {
-        const url = new URL('/collections', API_BASE_URL).toString()
-        const response = await fetch(url)
+        const url = `${API_BASE_URL.replace(/\/$/, '')}/collections`
+        const token = await getToken()
+        const response = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
         if (response.ok) {
           const data = await response.json()
           setCollections(data.collections || [])
@@ -33,7 +38,7 @@ export default function QuizPage() {
     }
 
     loadCollections()
-  }, [])
+  }, [getToken])
 
   const handleGenerateQuiz = async (
     collection: string,
