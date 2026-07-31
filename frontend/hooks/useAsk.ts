@@ -2,6 +2,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { askQuestion, AskApiError, type AskResponse, type Source } from '@/lib/api/ask'
+import { getSessionHistory } from '@/lib/api/session'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -116,11 +117,38 @@ export function useAsk(collection: string) {
     setState({ messages: [], status: 'idle', error: null })
   }, [])
 
+  // Resume a past chat picked from the "recent chats" list — fetches its
+  // saved history and swaps the active session_id so new turns append to it.
+  const loadSession = useCallback(async (sessionId: string) => {
+    abortRef.current?.abort()
+    setState((prev) => ({ ...prev, status: 'loading', error: null }))
+
+    try {
+      const token = await getToken()
+      const { history } = await getSessionHistory(sessionId, token || undefined)
+      sessionIdRef.current = sessionId
+      setState({
+        messages: history.map((turn) => ({
+          id: crypto.randomUUID(),
+          role: turn.role,
+          content: turn.content,
+          timestamp: new Date(),
+        })),
+        status: 'idle',
+        error: null,
+      })
+    } catch {
+      setState((prev) => ({ ...prev, status: 'error', error: 'Could not load that chat.' }))
+    }
+  }, [getToken])
+
   return {
     messages: state.messages,
     isLoading: state.status === 'loading',
     error: state.error,
+    sessionId: sessionIdRef.current,
     ask,
     clearChat,
+    loadSession,
   }
 }

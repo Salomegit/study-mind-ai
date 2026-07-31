@@ -1,10 +1,11 @@
 # backend/routers/ask.py
 
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from schemas import QuestionRequest, QuestionResponse
+from services.auth import get_optional_user_id
 from services.input_guard import validate_question, validate_collection_name, InputValidationError
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ def get_qa_bot():
 
 
 @router.post("/ask", response_model=QuestionResponse)
-def ask_question(request: QuestionRequest):
+def ask_question(request: QuestionRequest, user_id: str | None = Depends(get_optional_user_id)):
     """
     Ask a question about an uploaded document.
 
@@ -32,6 +33,11 @@ def ask_question(request: QuestionRequest):
     - Layer 2b: input_guard.validate_question() checks length + injection patterns
     - Layer 3: prompts.py uses XML delimiters to isolate user input
     - Layer 4: rag_qa.py calls sanitise_output() on Gemini's response
+
+    Auth is best-effort here (get_optional_user_id): a valid Clerk token
+    stamps the session with its owner so it shows up correctly-scoped in
+    GET /sessions; no token still works (anonymous session), matching the
+    original no-auth trust model. An invalid/expired token is rejected (401).
     """
     try:
         clean_question = validate_question(request.question)
@@ -51,6 +57,7 @@ def ask_question(request: QuestionRequest):
             question=clean_question,
             collection_name=clean_collection,
             session_id=request.session_id,
+            user_id=user_id,
         )
         logger.info("Answer generated — chunks_retrieved: %d", result.get("num_chunks_retrieved", 0))
         return JSONResponse(status_code=200, content=result)

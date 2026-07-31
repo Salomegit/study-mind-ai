@@ -47,6 +47,7 @@ class RAGQABot:
         collection_name: str,
         session_id: str | None = None,
         top_k: int = 8,
+        user_id: str | None = None,
     ) -> dict:
         """
         Full RAG pipeline:
@@ -61,7 +62,7 @@ class RAGQABot:
         9. Return structured response (matches QuestionResponse schema)
         """
         # Step 1 — Load history
-        history = session_memory.get_history(session_id) if session_id else []
+        history = session_memory.get_history(session_id, user_id=user_id) if session_id else []
 
         # Step 2 — Retrieve
         chunks = self.retriever.search(question, collection_name, top_k=top_k)
@@ -113,11 +114,11 @@ class RAGQABot:
 
             # Step 8 — Persist both turns to session memory
             if session_id:
-                session_memory.save_turn(session_id, "user", question)
-                session_memory.save_turn(session_id, "assistant", answer)
+                session_memory.save_turn(session_id, "user", question, collection=collection_name, user_id=user_id)
+                session_memory.save_turn(session_id, "assistant", answer, collection=collection_name, user_id=user_id)
 
             # Reload history so response reflects the just-saved turns
-            updated_history = session_memory.get_history(session_id) if session_id else []
+            updated_history = session_memory.get_history(session_id, user_id=user_id) if session_id else []
 
             logger.info(
                 "Answer generated — collection: %s | chunks: %d | top_score: %.4f",

@@ -138,6 +138,7 @@ python-iso639==2026.4.20
 python-magic==0.4.27
 python-multipart==0.0.30
 python-oxmsg==0.0.2
+PyJWT==2.13.0
 PyYAML==6.0.3
 RapidFuzz==3.14.5
 referencing==0.37.0
